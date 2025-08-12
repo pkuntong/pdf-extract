@@ -1,0 +1,32 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="#1e40af"/>
+  
+  <!-- Document background -->
+  <rect x="120" y="80" width="272" height="352" rx="16" fill="white"/>
+  
+  <!-- Document lines -->
+  <rect x="160" y="140" width="192" height="8" rx="4" fill="#e5e7eb"/>
+  <rect x="160" y="170" width="232" height="8" rx="4" fill="#e5e7eb"/>
+  <rect x="160" y="200" width="180" height="8" rx="4" fill="#e5e7eb"/>
+  <rect x="160" y="230" width="200" height="8" rx="4" fill="#e5e7eb"/>
+  <rect x="160" y="260" width="160" height="8" rx="4" fill="#e5e7eb"/>
+  
+  <!-- Invoice header -->
+  <rect x="160" y="140" width="80" height="8" rx="4" fill="#3b82f6"/>
+  <rect x="160" y="170" width="120" height="8" rx="4" fill="#3b82f6"/>
+  
+  <!-- Amount highlight -->
+  <rect x="280" y="320" width="72" height="24" rx="8" fill="#10b981"/>
+  <rect x="290" y="328" width="52" height="8" rx="4" fill="white"/>
+  
+  <!-- Extraction lines/arrows -->
+  <path d="M420 160 L460 200 L420 240" stroke="#fbbf24" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M420 280 L460 320 L420 360" stroke="#fbbf24" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  
+  <!-- Data points -->
+  <circle cx="470" cy="200" r="8" fill="#fbbf24"/>
+  <circle cx="470" cy="240" r="8" fill="#fbbf24"/>
+  <circle cx="470" cy="320" r="8" fill="#fbbf24"/>
+  <circle cx="470" cy="360" r="8" fill="#fbbf24"/>
+</svg>
