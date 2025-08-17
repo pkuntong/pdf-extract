@@ -13,12 +13,18 @@ import { animated, useSpring, useTransition } from '@react-spring/web';
 const AnimatedDiv = animated('div');
 import toast, { Toaster } from 'react-hot-toast';
 
+// Define the BeforeInstallPromptEvent interface
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
 export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   const [extractedData, setExtractedData] = useState<ExtractionResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [isInstallPromptVisible, setIsInstallPromptVisible] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   
   const { triggerSuccess, triggerError, triggerImpact } = useHapticFeedback();
   const { isOnline, saveExtraction, getExtractions } = useOfflineStorage();
@@ -40,7 +46,7 @@ export default function Home() {
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
       setIsInstallPromptVisible(true);
     };
 

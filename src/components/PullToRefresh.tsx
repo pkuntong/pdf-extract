@@ -66,7 +66,7 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({
 
   const bind = useGesture(
     {
-      onDrag: ({ movement: [, my], velocity: [, vy], direction: [, dy], cancel }) => {
+      onDrag: ({ movement: [, my], cancel }) => {
         if (disabled || isRefreshing) {
           cancel();
           return;

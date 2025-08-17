@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently 'NEXT_DISABLE_TURBOPACK=1 next dev -p 3000' 'sleep 2 && open http://localhost:3000'",
+    "dev": "NEXT_DISABLE_TURBOPACK=1 next dev -p 3000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

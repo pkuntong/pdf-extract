@@ -26,8 +26,14 @@ export const useHapticFeedback = () => {
     }
     
     // For iOS devices with haptic feedback API
-    if ('haptics' in window && typeof (window as any).haptics?.impact === 'function') {
-      (window as any).haptics.impact({ style: type });
+    interface WindowWithHaptics extends Window {
+      haptics?: {
+        impact: (options: { style: string }) => void;
+      };
+    }
+    
+    if ('haptics' in window && typeof (window as WindowWithHaptics).haptics?.impact === 'function') {
+      (window as WindowWithHaptics).haptics?.impact({ style: type });
     }
   }, []);
 

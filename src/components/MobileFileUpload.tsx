@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useState, useRef } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, FileRejection } from 'react-dropzone';
 import { Upload, Camera, FolderOpen, X, FileText } from 'lucide-react';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { animated, useSpring, useSprings } from '@react-spring/web';
@@ -26,7 +26,7 @@ export const MobileFileUpload: React.FC<MobileFileUploadProps> = ({
   
   const { triggerSelection, triggerImpact, triggerError } = useHapticFeedback();
 
-  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: any[]) => {
+  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
     if (rejectedFiles.length > 0) {
       triggerError();
       return;

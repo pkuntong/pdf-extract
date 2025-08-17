@@ -24,7 +24,7 @@ interface PDFExtractorDB extends DBSchema {
     key: string;
     value: {
       key: string;
-      value: any;
+      value: unknown;
     };
   };
 }
@@ -128,7 +128,7 @@ export const useOfflineStorage = () => {
     await db.clear('extractions');
   }, [db]);
 
-  const saveSetting = useCallback(async (key: string, value: any) => {
+  const saveSetting = useCallback(async (key: string, value: unknown) => {
     if (!db) return;
     await db.put('settings', { key, value });
   }, [db]);
@@ -140,7 +140,7 @@ export const useOfflineStorage = () => {
   }, [db]);
 
   // Queue for sync when back online
-  const queueForSync = useCallback(async (data: any) => {
+  const queueForSync = useCallback(async (data: ExtractionResult[]) => {
     if (!db) return;
     
     const queueItem = {

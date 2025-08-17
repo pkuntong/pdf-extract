@@ -8,8 +8,14 @@ async function initPdfJs() {
   if (!pdfjsLib) {
     pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
     
-    // Configure worker for server-side usage - use empty string to disable
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    // Configure worker for server-side usage
+    if (typeof window === 'undefined') {
+      // Server-side: disable worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    } else {
+      // Client-side: use CDN worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+    }
   }
   return pdfjsLib;
 }
@@ -167,18 +173,18 @@ export async function POST(request: NextRequest) {
       // Add progress for mobile feedback
       processedCount++;
       
-      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      if (file.type !== 'application/pdf' && !file.name?.toLowerCase().endsWith('.pdf')) {
         extractions.push({
-          filename: file.name,
-          error: `Error: ${file.name} is not a PDF file`
+          filename: file.name || 'Unknown file',
+          error: `Error: ${file.name || 'Unknown file'} is not a PDF file`
         });
         continue;
       }
 
       if (file.size > 10 * 1024 * 1024) { // 10MB per file limit
         extractions.push({
-          filename: file.name,
-          error: `Error: ${file.name} is too large (max 10MB per file)`
+          filename: file.name || 'Unknown file',
+          error: `Error: ${file.name || 'Unknown file'} is too large (max 10MB per file)`
         });
         continue;
       }
@@ -188,12 +194,13 @@ export async function POST(request: NextRequest) {
         
         // Extract text using pdfjs-dist
         const text = await extractTextFromPDF(arrayBuffer);
-        const extractedData = extractInvoiceData(text, file.name);
+        const extractedData = extractInvoiceData(text, file.name || 'Unknown file');
         extractions.push(extractedData);
       } catch (error) {
+        console.error(`PDF processing error for ${file.name || 'Unknown file'}:`, error);
         extractions.push({
-          filename: file.name,
-          error: `Error processing ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
+          filename: file.name || 'Unknown file',
+          error: `Error processing ${file.name || 'Unknown file'}: ${error instanceof Error ? error.message : 'Unknown error'}`
         });
       }
     }
