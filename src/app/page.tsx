@@ -85,8 +85,17 @@ export default function Home() {
 
     // Check limits based on OCR mode
     const maxFiles = ocrMode ? 3 : (isPremium ? 50 : 5);
+    const maxFileSize = ocrMode ? 10 : (isPremium ? 15 : 10); // MB
+    
     if (files.length > maxFiles) {
       toast.error(`${ocrMode ? 'OCR mode' : 'Free plan'} allows up to ${maxFiles} files. ${!isPremium ? 'Upgrade to Pro for more!' : ''}`);
+      return;
+    }
+
+    // Check file sizes
+    const oversizedFiles = files.filter(file => file.size > maxFileSize * 1024 * 1024);
+    if (oversizedFiles.length > 0) {
+      toast.error(`${oversizedFiles.length} file(s) exceed ${maxFileSize}MB limit for ${ocrMode ? 'OCR processing' : 'current plan'}`);
       return;
     }
 
@@ -357,7 +366,7 @@ export default function Home() {
                         <div>
                           <h4 className="font-medium text-purple-800 dark:text-purple-200">OCR Mode</h4>
                           <p className="text-xs text-purple-600 dark:text-purple-300">
-                            Extract text from scanned PDFs and images (slower, max 3 files)
+                            Extract text from scanned PDFs and images (slower, max 3 files, 10MB each)
                           </p>
                         </div>
                       </div>

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
+export const maxDuration = 60; // 60 seconds timeout for OCR processing
+// Configure larger body size limit for file uploads
+export const preferredRegion = 'auto';
+
 import { ExtractionResult, LineItem } from '@/types/extraction';
 
 // Enhanced PDF text extraction with OCR fallback
@@ -107,11 +111,62 @@ async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
   }
 }
 
+// Direct image OCR extraction
+async function extractTextFromImageWithOCR(arrayBuffer: ArrayBuffer, filename: string): Promise<string> {
+  try {
+    console.log(`Starting direct image OCR for ${filename}...`);
+    
+    const OCR_TIMEOUT_MS = 25000;
+    const { createWorker } = await import('tesseract.js');
+    
+    const worker = await createWorker('eng');
+    
+    try {
+      // Convert ArrayBuffer to base64 data URL for Tesseract
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const base64 = Buffer.from(uint8Array).toString('base64');
+      const mimeType = filename.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+      const imageData = `data:${mimeType};base64,${base64}`;
+      
+      console.log(`🔍 Processing OCR for image ${filename}...`);
+      
+      const ocrPromise = (async () => {
+        const result = await worker.recognize(imageData);
+        
+        if (!result.data.text || !result.data.text.trim()) {
+          throw new Error('OCR could not extract any readable text from image');
+        }
+        
+        console.log(`✅ Image OCR successful for ${filename} (${result.data.text.length} chars)`);
+        return result.data.text.trim();
+      })();
+
+      const timeoutPromise = new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error('OCR timed out')), OCR_TIMEOUT_MS);
+      });
+
+      return await Promise.race([ocrPromise, timeoutPromise]);
+      
+    } finally {
+      await worker.terminate();
+    }
+    
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`❌ Image OCR failed for ${filename}:`, errorMessage);
+    throw new Error(`Image OCR failed: ${errorMessage}`);
+  }
+}
+
 // OCR extraction using Tesseract.js
 async function performOCRExtraction(arrayBuffer: ArrayBuffer, filename: string): Promise<string> {
   try {
+    const OCR_TIMEOUT_MS = 25000;
     // Import Tesseract.js dynamically
-    const Tesseract = await import('tesseract.js');
+    const { createWorker } = await import('tesseract.js');
+    
+    // Configure Tesseract for server environment
+    const worker = await createWorker('eng');
     
     let pdfImages: string[] = [];
     
@@ -121,23 +176,23 @@ async function performOCRExtraction(arrayBuffer: ArrayBuffer, filename: string):
     } catch (conversionError) {
       console.warn(`PDF conversion failed for ${filename}, trying alternative OCR approach...`);
       
-      // If PDF.js fails completely, try processing the PDF directly with Tesseract
-      // This works for some scanned PDFs that Tesseract can handle directly
+      // If PDF.js fails completely, try alternative PDF-to-image conversion
       try {
-        console.log(`🔍 Attempting direct OCR on PDF buffer for ${filename}...`);
-        const result = await Tesseract.recognize(Buffer.from(arrayBuffer), 'eng', {
-          logger: () => {}, // Disable verbose logging
-        });
+        console.log(`🔍 Attempting alternative PDF conversion for ${filename}...`);
+        pdfImages = await convertPDFToImagesAlternative(arrayBuffer, filename);
+        console.log(`✅ Alternative conversion successful for ${filename} (${pdfImages.length} images)`);
+      } catch (alternativeError) {
+        console.warn(`Alternative PDF conversion also failed for ${filename}:`, alternativeError);
         
-        if (result.data.text && result.data.text.trim().length > 20) {
-          console.log(`✅ Direct PDF OCR successful for ${filename} (${result.data.text.length} chars)`);
-          return result.data.text.trim();
+        // If this PDF has the "Object.defineProperty called on non-object" error,
+        // it's likely a corrupted or password-protected PDF that can't be processed
+        const errorMessage = alternativeError instanceof Error ? alternativeError.message : 'Unknown error';
+        if (errorMessage.includes('Object.defineProperty called on non-object')) {
+          throw new Error('PDF file appears to be corrupted, password-protected, or in an unsupported format. Please try:\n1. Converting the PDF to images (PNG/JPG) and uploading those instead\n2. Using a different PDF extraction tool to repair the file\n3. Exporting the document to a new PDF format');
         }
-      } catch (directOCRError) {
-        console.warn(`Direct PDF OCR also failed for ${filename}:`, directOCRError);
+        
+        throw new Error('All PDF conversion methods failed - file may be corrupted or in unsupported format');
       }
-      
-      throw new Error('Could not convert PDF to images and direct OCR failed');
     }
     
     if (!pdfImages || pdfImages.length === 0) {
@@ -147,34 +202,115 @@ async function performOCRExtraction(arrayBuffer: ArrayBuffer, filename: string):
     console.log(`📸 Converted ${filename} to ${pdfImages.length} image(s) for OCR`);
     
     let allText = '';
-    const maxImages = Math.min(pdfImages.length, 5); // Limit for performance
+    // For responsiveness, OCR only the first page at a time by default
+    const maxImages = Math.min(pdfImages.length, 1);
     
-    for (let i = 0; i < maxImages; i++) {
-      try {
-        console.log(`🔍 Processing OCR for page ${i + 1}/${maxImages}...`);
-        
-        const result = await Tesseract.recognize(pdfImages[i], 'eng', {
-          logger: () => {}, // Disable verbose logging
-        });
-        
-        if (result.data.text && result.data.text.trim()) {
-          allText += result.data.text.trim() + '\n';
-          console.log(`✅ OCR page ${i + 1}: ${result.data.text.length} chars extracted`);
+    try {
+      const ocrPromise = (async () => {
+        for (let i = 0; i < maxImages; i++) {
+          try {
+            console.log(`🔍 Processing OCR for page ${i + 1}/${maxImages}...`);
+            const result = await worker.recognize(pdfImages[i]);
+            if (result.data.text && result.data.text.trim()) {
+              allText += result.data.text.trim() + '\n';
+              console.log(`✅ OCR page ${i + 1}: ${result.data.text.length} chars extracted`);
+            }
+          } catch (pageOCRError) {
+            console.warn(`Failed OCR for page ${i + 1}:`, pageOCRError);
+            continue;
+          }
         }
-      } catch (pageOCRError) {
-        console.warn(`Failed OCR for page ${i + 1}:`, pageOCRError);
+        if (!allText.trim()) {
+          throw new Error('OCR could not extract any readable text');
+        }
+        return allText.trim();
+      })();
+
+      const timeoutPromise = new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error('OCR timed out')), OCR_TIMEOUT_MS);
+      });
+
+      return await Promise.race([ocrPromise, timeoutPromise]);
+    } finally {
+      // Always clean up worker
+      await worker.terminate();
+    }
+    
+  } catch (error) {
+    throw new Error(`OCR processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// Alternative PDF to image conversion - simplified fallback without pdf2pic
+async function convertPDFToImagesAlternative(arrayBuffer: ArrayBuffer, filename: string): Promise<string[]> {
+  try {
+    // Since pdf2pic has issues with buffer handling in server environment,
+    // we'll try a simpler approach using PDF.js with different settings
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    
+    if (typeof window === 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    }
+
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const pdf = await pdfjsLib.getDocument({
+      data: uint8Array,
+      verbosity: 0,
+      disableAutoFetch: false,  // Different settings from main function
+      disableStream: false,
+      disableFontFace: false,
+      useSystemFonts: true,
+      stopAtErrors: true
+    }).promise;
+
+    const images: string[] = [];
+    const maxPages = Math.min(pdf.numPages, 2); // Limit for performance
+    
+    console.log(`Alternative conversion: Processing ${maxPages} pages from ${filename}...`);
+
+    for (let i = 1; i <= maxPages; i++) {
+      try {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.2 }); // Lower resolution for fallback
+        
+        // Import canvas dynamically (Node.js environment)
+        const { createCanvas } = await import('canvas');
+        const canvas = createCanvas(viewport.width, viewport.height);
+        const context = canvas.getContext('2d');
+        
+        // Render PDF page to canvas
+        const renderContext = {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          canvasContext: context as any,
+          viewport: viewport,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          canvas: canvas as any,
+        };
+        
+        await page.render(renderContext).promise;
+        
+        // Convert canvas to base64 image (avoid filename parameter)
+        const imageData = canvas.toDataURL();
+        images.push(imageData);
+        
+        console.log(`✅ Alternative converted page ${i} from ${filename}`);
+        
+      } catch (pageError) {
+        console.warn(`Alternative conversion failed for page ${i}:`, pageError);
         continue;
       }
     }
     
-    if (!allText.trim()) {
-      throw new Error('OCR could not extract any readable text');
+    if (images.length === 0) {
+      throw new Error('Alternative conversion could not convert any pages');
     }
     
-    return allText.trim();
+    console.log(`✅ Alternative conversion successful for ${filename} (${images.length} images)`);
+    return images;
     
   } catch (error) {
-    throw new Error(`OCR processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.warn(`Alternative PDF conversion failed for ${filename}:`, error);
+    throw new Error(`Alternative PDF conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -210,7 +346,7 @@ async function convertPDFToImages(arrayBuffer: ArrayBuffer): Promise<string[]> {
     for (let i = 1; i <= maxPages; i++) {
       try {
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2.0 }); // Higher resolution for better OCR
+        const viewport = page.getViewport({ scale: 1.5 }); // Lower to speed up OCR
         
         // Import canvas dynamically (Node.js environment)
         const { createCanvas } = await import('canvas');
@@ -228,8 +364,8 @@ async function convertPDFToImages(arrayBuffer: ArrayBuffer): Promise<string[]> {
         
         await page.render(renderContext).promise;
         
-        // Convert canvas to base64 image
-        const imageData = canvas.toDataURL('image/png');
+        // Convert canvas to base64 image (avoid filename parameter)
+        const imageData = canvas.toDataURL();
         images.push(imageData);
         
         console.log(`✅ Converted page ${i} to image (${viewport.width}x${viewport.height})`);
@@ -457,14 +593,16 @@ function extractInvoiceData(text: string, filename: string): ExtractionResult {
 
 export async function GET() {
   return NextResponse.json({ 
-    message: 'OCR-enhanced PDF extraction API endpoint. Use POST to extract data from PDFs.',
-    note: 'This version includes OCR fallback for scanned PDFs using Tesseract.js',
+    message: 'OCR-enhanced PDF extraction API endpoint. Use POST to extract data from PDFs or images.',
+    note: 'This version includes OCR fallback for scanned PDFs and direct image OCR using Tesseract.js',
     features: [
       'Standard PDF text extraction',
-      'OCR fallback for scanned documents', 
+      'OCR fallback for scanned documents',
+      'Direct image OCR (PNG, JPG, etc.)',
       'Line item detection',
       'Invoice data parsing'
-    ]
+    ],
+    supportedFormats: ['PDF', 'PNG', 'JPG', 'JPEG', 'GIF', 'BMP', 'WEBP']
   });
 }
 
@@ -486,26 +624,41 @@ export async function POST(request: NextRequest) {
     const extractions: ExtractionResult[] = [];
     
     for (const file of files) {
-      if (file.type !== 'application/pdf' && !file.name?.toLowerCase().endsWith('.pdf')) {
+      const fileName = file.name || 'Unknown file';
+      const fileType = file.type;
+      const isImage = fileType.startsWith('image/') || 
+        fileName.toLowerCase().match(/\.(png|jpg|jpeg|gif|bmp|webp)$/);
+      const isPDF = fileType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');
+      
+      if (!isPDF && !isImage) {
         extractions.push({
-          filename: file.name || 'Unknown file',
-          error: `File is not a PDF`
+          filename: fileName,
+          error: `File must be a PDF or image (PNG, JPG, etc.)`
         });
         continue;
       }
 
-      if (file.size > 15 * 1024 * 1024) { // 15MB limit for OCR
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit for OCR (due to Next.js constraints)
         extractions.push({
           filename: file.name || 'Unknown file',
-          error: `File too large for OCR processing (max 15MB)`
+          error: `File too large for OCR processing (max 10MB)`
         });
         continue;
       }
       
       try {
         const arrayBuffer = await file.arrayBuffer();
-        const text = await extractTextFromPDFWithOCR(arrayBuffer, file.name || 'Unknown file');
-        const extractedData = extractInvoiceData(text, file.name || 'Unknown file');
+        
+        let text: string;
+        if (isImage) {
+          // Direct image OCR processing
+          text = await extractTextFromImageWithOCR(arrayBuffer, fileName);
+        } else {
+          // PDF processing with OCR fallback
+          text = await extractTextFromPDFWithOCR(arrayBuffer, fileName);
+        }
+        
+        const extractedData = extractInvoiceData(text, fileName);
         
         // Add OCR metadata
         extractedData.notes = extractedData.notes || '';
