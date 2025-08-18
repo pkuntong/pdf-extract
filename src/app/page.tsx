@@ -96,8 +96,8 @@ export default function Home() {
         formData.append('files', file);
       });
 
-      // Use enhanced API for premium features, standard for free
-      const apiEndpoint = isPremium ? '/api/extract-enhanced' : '/api/extract';
+      // Use enhanced API for premium features, simple for free (more reliable)
+      const apiEndpoint = isPremium ? '/api/extract-enhanced' : '/api/extract-simple';
       
       const response = await fetch(apiEndpoint, {
         method: 'POST',

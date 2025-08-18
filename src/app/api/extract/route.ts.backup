@@ -1,0 +1,418 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { ExtractionResult } from '@/types/extraction';
+
+export async function GET() {
+  return NextResponse.json({ 
+    message: 'PDF extraction API endpoint. Use POST to extract data from PDFs.',
+    endpoints: {
+      '/api/extract': 'Standard extraction',
+      '/api/extract-enhanced': 'Premium extraction with advanced patterns'
+    }
+  });
+}
+
+// PDF.js initialization with better error handling
+let pdfjsLib: any = null;
+let initPromise: Promise<any> | null = null;
+
+async function initPdfJs() {
+  if (initPromise) {
+    return initPromise;
+  }
+  
+  initPromise = (async () => {
+    if (pdfjsLib) {
+      return pdfjsLib;
+    }
+    
+    try {
+      console.log('Initializing PDF.js...');
+      
+      // Try different import strategies
+      try {
+        pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
+        console.log('Loaded PDF.js MJS build');
+      } catch (mjsError) {
+        console.log('MJS build failed, trying standard build:', mjsError);
+        try {
+          pdfjsLib = await import('pdfjs-dist');
+          console.log('Loaded PDF.js standard build');
+        } catch (standardError) {
+          console.log('Standard build failed, trying legacy build:', standardError);
+          pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+          console.log('Loaded PDF.js legacy build');
+        }
+      }
+      
+      if (!pdfjsLib) {
+        throw new Error('PDF.js library not loaded');
+      }
+      
+      // Disable worker completely for server-side
+      if (pdfjsLib.GlobalWorkerOptions) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = false;
+        console.log('Disabled PDF.js worker for server-side rendering');
+      }
+      
+      console.log('PDF.js initialized successfully');
+      return pdfjsLib;
+      
+    } catch (error) {
+      console.error('Failed to initialize PDF.js:', error);
+      initPromise = null; // Reset for retry
+      throw new Error(`PDF.js initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  })();
+  
+  return initPromise;
+}
+
+
+// Fallback PDF extraction using pdf-parse (Node.js friendly)
+async function extractTextFromPDFFallback(arrayBuffer: ArrayBuffer): Promise<string> {
+  try {
+    console.log('Using pdf-parse fallback for PDF extraction...');
+    const pdf = require('pdf-parse');
+    const buffer = Buffer.from(arrayBuffer);
+    const data = await pdf(buffer);
+    
+    if (!data.text || data.text.trim().length === 0) {
+      throw new Error('No readable text found in PDF');
+    }
+    
+    console.log(`Extracted ${data.text.length} characters using pdf-parse`);
+    return data.text.trim();
+  } catch (error) {
+    console.error('pdf-parse extraction failed:', error);
+    throw new Error(`PDF text extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
+  try {
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error('PDF file is empty or invalid');
+    }
+    
+    console.log(`Attempting to process PDF with size: ${arrayBuffer.byteLength} bytes`);
+    
+    // Validate PDF header
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const pdfHeader = new TextDecoder('ascii').decode(uint8Array.slice(0, 8));
+    if (!pdfHeader.startsWith('%PDF-')) {
+      throw new Error('File is not a valid PDF (missing PDF header)');
+    }
+    console.log(`PDF version detected: ${pdfHeader}`);
+    
+    // Try pdf-parse first (more reliable in Node.js)
+    try {
+      return await extractTextFromPDFFallback(arrayBuffer);
+    } catch (fallbackError) {
+      console.warn('pdf-parse failed, trying PDF.js:', fallbackError);
+      
+      // Fallback to PDF.js if pdf-parse fails
+      return await extractTextWithPDFJS(arrayBuffer);
+    }
+    
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('PDF extraction error:', errorMessage);
+    
+    // Provide more specific error messages
+    if (errorMessage.includes('missing PDF header')) {
+      throw new Error('File is not a valid PDF document');
+    } else if (errorMessage.includes('No readable text found')) {
+      throw new Error('PDF appears to be a scanned image or has no extractable text');
+    }
+    
+    throw new Error(`PDF parsing failed: ${errorMessage}`);
+  }
+}
+
+// PDF.js extraction (original method as fallback)
+async function extractTextWithPDFJS(arrayBuffer: ArrayBuffer): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let pdf: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let loadingTask: any = null;
+  
+  try {
+    console.log('Trying PDF.js extraction...');
+    const pdfjs = await initPdfJs();
+    
+    if (!pdfjs) {
+      throw new Error('PDF.js library not available');
+    }
+
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    loadingTask = pdfjs.getDocument({
+      data: uint8Array,
+      verbosity: 0,
+      disableAutoFetch: true,
+      disableStream: true,
+      disableFontFace: true,
+      useSystemFonts: false,
+      stopAtErrors: false
+    });
+    
+    pdf = await loadingTask.promise;
+    
+    if (!pdf || pdf.numPages === 0) {
+      throw new Error('PDF loaded but has no pages');
+    }
+    
+    console.log(`Successfully loaded PDF with ${pdf.numPages} pages`);
+    
+    let fullText = '';
+    const maxPages = Math.min(pdf.numPages, 50);
+    
+    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+      try {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        
+        if (textContent && textContent.items) {
+          const pageText = textContent.items
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .filter((item: any) => item && item.str)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .map((item: any) => item.str || '')
+            .filter((text: string) => text.trim())
+            .join(' ');
+          
+          if (pageText.trim()) {
+            fullText += pageText.trim() + '\n';
+          }
+        }
+        
+        page.cleanup();
+      } catch (pageError) {
+        console.warn(`Failed to process page ${pageNum}:`, pageError);
+        continue;
+      }
+    }
+    
+    if (!fullText.trim()) {
+      throw new Error('No readable text content found in PDF');
+    }
+    
+    return fullText.trim();
+    
+  } catch (error) {
+    throw new Error(`PDF.js extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  } finally {
+    try {
+      if (pdf) pdf.destroy();
+      if (loadingTask) loadingTask.destroy();
+    } catch (cleanupError) {
+      console.warn('Cleanup warning:', cleanupError);
+    }
+  }
+}
+
+function extractInvoiceData(text: string, filename: string): ExtractionResult {
+  const result: ExtractionResult = { filename };
+  
+  // Multiple patterns for invoice numbers
+  const invoicePatterns = [
+    /(?:invoice\s*(?:number|#|no\.?)?|inv\s*(?:number|#|no\.?)?|bill\s*(?:number|#|no\.?)?)\s*:?\s*([A-Z0-9\-_]+)/i,
+    /(?:^|\s)([A-Z]{2,3}-?\d{4,})/m, // Pattern like ABC-1234 or ABC1234
+    /#\s*([A-Z0-9\-_]{3,})/i, // Pattern like #INV123
+  ];
+  
+  for (const pattern of invoicePatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      result.invoiceNumber = match[1].trim();
+      break;
+    }
+  }
+  
+  // Multiple patterns for dates
+  const datePatterns = [
+    /(?:date|invoice\s*date|issued|bill\s*date)\s*:?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+    /(?:date|invoice\s*date|issued|bill\s*date)\s*:?\s*(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/i,
+    /(?:date|invoice\s*date|issued|bill\s*date)\s*:?\s*(\w{3,9}\s+\d{1,2},?\s+\d{4})/i,
+    /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/, // Any date format
+  ];
+  
+  for (const pattern of datePatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      result.date = match[1].trim();
+      break;
+    }
+  }
+  
+  // Multiple patterns for vendor/company
+  const vendorPatterns = [
+    /(?:from|vendor|company|bill\s*to|sold\s*by)\s*:?\s*([A-Za-z\s&,.\-'()]+?)(?:\n|$|\s{2,})/i,
+    /^([A-Za-z\s&,.\-'()]{3,})\s*(?:\n|\r)/m, // First line that looks like a company name
+    /(?:^|\n)\s*([A-Z][A-Za-z\s&,.\-'()]{5,}?)\s*(?:\n|Address|Phone|Email|Tax)/i,
+  ];
+  
+  for (const pattern of vendorPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const vendor = match[1].trim().replace(/[:\n\r]+$/, '');
+      if (vendor.length > 2 && vendor.length < 100) {
+        result.vendor = vendor;
+        break;
+      }
+    }
+  }
+  
+  // Multiple patterns for total amount
+  const totalPatterns = [
+    /(?:total|grand\s*total|amount\s*due|balance\s*due|final\s*amount)\s*:?\s*\$?\s*([\d,]+\.?\d*)/i,
+    /(?:total|grand\s*total|amount\s*due|balance\s*due)\s*\$?\s*([\d,]+\.?\d*)/i,
+    /\$\s*([\d,]+\.\d{2})(?:\s|$)/, // Any currency amount
+    /(?:^|\s)([\d,]+\.\d{2})\s*$$/m, // End of line amount
+  ];
+  
+  for (const pattern of totalPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const amount = match[1].replace(/,/g, '');
+      if (parseFloat(amount) > 0) {
+        result.total = amount;
+        break;
+      }
+    }
+  }
+  
+  return result;
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    // Check content length for mobile optimization
+    const contentLength = request.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 50 * 1024 * 1024) { // 50MB limit
+      return NextResponse.json(
+        { error: 'Files too large. Maximum total size is 50MB.' },
+        { status: 413 }
+      );
+    }
+
+    const formData = await request.formData();
+    const files = formData.getAll('files') as File[];
+    
+    if (!files || files.length === 0) {
+      return NextResponse.json({ error: 'No files provided' }, { status: 400 });
+    }
+
+    if (files.length > 10) {
+      return NextResponse.json({ error: 'Maximum 10 files allowed' }, { status: 400 });
+    }
+    
+    const extractions: ExtractionResult[] = [];
+    let processedCount = 0;
+    
+    for (const file of files) {
+      // Add progress for mobile feedback
+      processedCount++;
+      
+      if (file.type !== 'application/pdf' && !file.name?.toLowerCase().endsWith('.pdf')) {
+        extractions.push({
+          filename: file.name || 'Unknown file',
+          error: `Error: ${file.name || 'Unknown file'} is not a PDF file`
+        });
+        continue;
+      }
+
+      if (file.size > 10 * 1024 * 1024) { // 10MB per file limit
+        extractions.push({
+          filename: file.name || 'Unknown file',
+          error: `Error: ${file.name || 'Unknown file'} is too large (max 10MB per file)`
+        });
+        continue;
+      }
+      
+      try {
+        // Validate file buffer
+        const arrayBuffer = await file.arrayBuffer();
+        if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+          throw new Error('File is empty or corrupted');
+        }
+        
+        // Extract text using pdfjs-dist
+        const text = await extractTextFromPDF(arrayBuffer);
+        if (!text || text.trim().length === 0) {
+          throw new Error('No readable text found in PDF');
+        }
+        
+        const extractedData = extractInvoiceData(text, file.name || 'Unknown file');
+        extractions.push(extractedData);
+        
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`PDF processing error for ${file.name || 'Unknown file'}:`, errorMessage);
+        
+        // Provide more helpful error messages
+        let userFriendlyError = errorMessage;
+        if (errorMessage.includes('Object.defineProperty called on non-object')) {
+          userFriendlyError = 'PDF format not supported or file is corrupted';
+        } else if (errorMessage.includes('PDF parsing failed')) {
+          userFriendlyError = 'Unable to read PDF - may be password protected or corrupted';
+        } else if (errorMessage.includes('No readable text')) {
+          userFriendlyError = 'PDF appears to be a scanned image - text extraction not available';
+        } else if (errorMessage.includes('Failed to load PDF')) {
+          userFriendlyError = 'PDF file format is not supported or corrupted';
+        }
+        
+        extractions.push({
+          filename: file.name || 'Unknown file',
+          error: `${userFriendlyError}`
+        });
+      }
+    }
+    
+    // Add processing metadata for mobile optimization
+    const response = {
+      extractions,
+      metadata: {
+        totalFiles: files.length,
+        processedFiles: processedCount,
+        successfulExtractions: extractions.filter(e => !e.error).length,
+        timestamp: new Date().toISOString(),
+      }
+    };
+    
+    return NextResponse.json(response, {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'X-Total-Files': files.length.toString(),
+        'X-Successful-Extractions': extractions.filter(e => !e.error).length.toString(),
+      }
+    });
+  } catch (error) {
+    console.error('API Error:', error);
+    
+    // More specific error messages for mobile users
+    let errorMessage = 'Internal server error';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      if (error.message.includes('PDF parsing failed')) {
+        errorMessage = 'Unable to read PDF files. Please ensure they are not corrupted or password-protected.';
+        statusCode = 422;
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Processing took too long. Please try with smaller files.';
+        statusCode = 408;
+      } else if (error.message.includes('memory')) {
+        errorMessage = 'Files too complex to process. Please try with simpler PDFs.';
+        statusCode = 413;
+      }
+    }
+    
+    return NextResponse.json(
+      { 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? error instanceof Error ? error.message : 'Unknown error' : undefined
+      },
+      { status: statusCode }
+    );
+  }
+}

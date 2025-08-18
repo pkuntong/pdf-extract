@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'nodejs';
 import { ExtractionResult } from '@/types/extraction';
 import { getAvailablePatterns, extractDataWithPatterns } from '@/lib/extraction-patterns';
 
