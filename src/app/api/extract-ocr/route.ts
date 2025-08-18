@@ -36,48 +36,75 @@ async function extractTextFromPDFWithOCR(arrayBuffer: ArrayBuffer, filename: str
   }
 }
 
-// Standard PDF text extraction (same as before)
+// Standard PDF text extraction with fallback (same as extract-simple)
 async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
-  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  
-  if (typeof window === 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-  }
+  try {
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error('PDF file is empty');
+    }
 
-  const uint8Array = new Uint8Array(arrayBuffer);
-  const pdf = await pdfjsLib.getDocument({
-    data: uint8Array,
-    verbosity: 0,
-    disableAutoFetch: true,
-    disableStream: true,
-    disableFontFace: true,
-    useSystemFonts: false,
-    stopAtErrors: false
-  }).promise;
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    
+    if (typeof window === 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    }
 
-  if (!pdf || pdf.numPages === 0) {
-    throw new Error('PDF has no pages');
-  }
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const pdf = await pdfjsLib.getDocument({
+      data: uint8Array,
+      verbosity: 0,
+      disableAutoFetch: true,
+      disableStream: true,
+      disableFontFace: true,
+      useSystemFonts: false,
+      stopAtErrors: false
+    }).promise;
 
-  let fullText = '';
-  const maxPages = Math.min(pdf.numPages, 10); // Limit for performance
-  
-  for (let i = 1; i <= maxPages; i++) {
+    if (!pdf || pdf.numPages === 0) {
+      throw new Error('PDF has no pages');
+    }
+
+    let fullText = '';
+    const maxPages = Math.min(pdf.numPages, 10); // Limit for performance
+    
+    for (let i = 1; i <= maxPages; i++) {
+      try {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item) => ('str' in item ? (item as { str: string }).str : ''))
+          .filter((t: string) => t.trim().length > 0)
+          .join(' ');
+        if (pageText.trim()) fullText += pageText + '\n';
+      } catch (pageError) {
+        console.warn(`Failed to process page ${i}:`, pageError);
+        continue;
+      }
+    }
+
+    if (!fullText.trim()) {
+      throw new Error('No readable text found in PDF');
+    }
+
+    return fullText.trim();
+  } catch (error) {
+    // Fallback to pdf-parse (debugging disabled fork) for better compatibility
     try {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item) => ('str' in item ? (item as { str: string }).str : ''))
-        .filter((t: string) => t.trim().length > 0)
-        .join(' ');
-      if (pageText.trim()) fullText += pageText + '\n';
-    } catch (pageError) {
-      console.warn(`Failed to process page ${i}:`, pageError);
-      continue;
+      const buffer = Buffer.from(arrayBuffer);
+      const pdfParse = (await import('pdf-parse-debugging-disabled')).default;
+      const result = await pdfParse(buffer, { max: 10 });
+      if (!result.text || !result.text.trim()) {
+        throw new Error('No readable text found in PDF');
+      }
+      return result.text.trim();
+    } catch (fallbackError) {
+      const message = fallbackError instanceof Error ? fallbackError.message : 'Unknown error';
+      if (message.includes('Object.defineProperty called on non-object')) {
+        throw new Error('PDF file format not supported or file is corrupted');
+      }
+      throw new Error(`PDF parsing failed: ${message}`);
     }
   }
-
-  return fullText.trim();
 }
 
 // OCR extraction using Tesseract.js
@@ -86,9 +113,32 @@ async function performOCRExtraction(arrayBuffer: ArrayBuffer, filename: string):
     // Import Tesseract.js dynamically
     const Tesseract = await import('tesseract.js');
     
-    // For PDFs, we need to convert to images first
-    // This is a simplified approach - in production you'd want proper PDF-to-image conversion
-    const pdfImages = await convertPDFToImages(arrayBuffer);
+    let pdfImages: string[] = [];
+    
+    // Try to convert PDF to images first
+    try {
+      pdfImages = await convertPDFToImages(arrayBuffer);
+    } catch (conversionError) {
+      console.warn(`PDF conversion failed for ${filename}, trying alternative OCR approach...`);
+      
+      // If PDF.js fails completely, try processing the PDF directly with Tesseract
+      // This works for some scanned PDFs that Tesseract can handle directly
+      try {
+        console.log(`🔍 Attempting direct OCR on PDF buffer for ${filename}...`);
+        const result = await Tesseract.recognize(Buffer.from(arrayBuffer), 'eng', {
+          logger: () => {}, // Disable verbose logging
+        });
+        
+        if (result.data.text && result.data.text.trim().length > 20) {
+          console.log(`✅ Direct PDF OCR successful for ${filename} (${result.data.text.length} chars)`);
+          return result.data.text.trim();
+        }
+      } catch (directOCRError) {
+        console.warn(`Direct PDF OCR also failed for ${filename}:`, directOCRError);
+      }
+      
+      throw new Error('Could not convert PDF to images and direct OCR failed');
+    }
     
     if (!pdfImages || pdfImages.length === 0) {
       throw new Error('Failed to convert PDF to images for OCR');
@@ -128,9 +178,13 @@ async function performOCRExtraction(arrayBuffer: ArrayBuffer, filename: string):
   }
 }
 
-// Convert PDF to images for OCR using Canvas
+// Convert PDF to images for OCR using Canvas with fallback
 async function convertPDFToImages(arrayBuffer: ArrayBuffer): Promise<string[]> {
   try {
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error('PDF file is empty');
+    }
+
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
     
     if (typeof window === 'undefined') {
@@ -142,7 +196,10 @@ async function convertPDFToImages(arrayBuffer: ArrayBuffer): Promise<string[]> {
       data: uint8Array,
       verbosity: 0,
       disableAutoFetch: true,
-      disableStream: true
+      disableStream: true,
+      disableFontFace: true,
+      useSystemFonts: false,
+      stopAtErrors: false
     }).promise;
 
     const images: string[] = [];
@@ -190,7 +247,13 @@ async function convertPDFToImages(arrayBuffer: ArrayBuffer): Promise<string[]> {
     return images;
     
   } catch (error) {
-    throw new Error(`PDF to image conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    // If PDF.js fails, we can't convert to images for OCR
+    // This happens with corrupted or incompatible PDF files
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    if (message.includes('Object.defineProperty called on non-object')) {
+      throw new Error('PDF file format not supported for OCR image conversion');
+    }
+    throw new Error(`PDF to image conversion failed: ${message}`);
   }
 }
 
