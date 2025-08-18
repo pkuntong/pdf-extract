@@ -17,6 +17,7 @@ export interface ExtractionResult {
   filename?: string;
   error?: string;
   lineItems?: LineItem[];
+  notes?: string;
 }
 
 export interface UploadResponse {

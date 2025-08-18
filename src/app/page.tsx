@@ -27,6 +27,8 @@ export default function Home() {
   const [isInstallPromptVisible, setIsInstallPromptVisible] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isPremium] = useState(false); // TODO: Connect to auth/subscription system
+  const [ocrMode, setOcrMode] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState<string>('');
   
   const { triggerSuccess, triggerError, triggerImpact } = useHapticFeedback();
   const { isOnline, saveExtraction } = useOfflineStorage();
@@ -81,13 +83,15 @@ export default function Home() {
       return;
     }
 
-    // Check premium limits
-    if (!isPremium && files.length > 5) {
-      toast.error('Free plan allows up to 5 files. Upgrade to Pro for more!');
+    // Check limits based on OCR mode
+    const maxFiles = ocrMode ? 3 : (isPremium ? 50 : 5);
+    if (files.length > maxFiles) {
+      toast.error(`${ocrMode ? 'OCR mode' : 'Free plan'} allows up to ${maxFiles} files. ${!isPremium ? 'Upgrade to Pro for more!' : ''}`);
       return;
     }
 
     setLoading(true);
+    setProcessingStatus('Initializing...');
     triggerImpact();
 
     try {
@@ -96,8 +100,18 @@ export default function Home() {
         formData.append('files', file);
       });
 
-      // Use enhanced API for premium features, simple for free (more reliable)
-      const apiEndpoint = isPremium ? '/api/extract-enhanced' : '/api/extract-simple';
+      // Choose API endpoint based on mode
+      let apiEndpoint: string;
+      if (ocrMode) {
+        apiEndpoint = '/api/extract-ocr';
+        setProcessingStatus('Processing with OCR (this may take longer)...');
+      } else if (isPremium) {
+        apiEndpoint = '/api/extract-enhanced';
+        setProcessingStatus('Processing with premium features...');
+      } else {
+        apiEndpoint = '/api/extract-simple';
+        setProcessingStatus('Processing PDFs...');
+      }
       
       const response = await fetch(apiEndpoint, {
         method: 'POST',
@@ -116,13 +130,20 @@ export default function Home() {
       await saveExtraction(data.extractions || [], files);
 
       triggerSuccess();
-      toast.success(`Extracted data from ${data.extractions?.length || 0} files!`);
+      
+      // Enhanced success message for OCR
+      if (ocrMode && data.metadata?.ocrProcessed > 0) {
+        toast.success(`OCR processed ${data.metadata.ocrProcessed} scanned files! Extracted data from ${data.extractions?.length || 0} total files.`);
+      } else {
+        toast.success(`Extracted data from ${data.extractions?.length || 0} files!`);
+      }
     } catch (error) {
       console.error('Extraction error:', error);
       triggerError();
       toast.error(error instanceof Error ? error.message : 'Extraction failed');
     } finally {
       setLoading(false);
+      setProcessingStatus('');
     }
   };
 
@@ -323,10 +344,45 @@ export default function Home() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {/* OCR Toggle */}
+                  <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-full bg-purple-100 dark:bg-purple-800">
+                          <svg className="h-4 w-4 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-purple-800 dark:text-purple-200">OCR Mode</h4>
+                          <p className="text-xs text-purple-600 dark:text-purple-300">
+                            Extract text from scanned PDFs and images (slower, max 3 files)
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setOcrMode(!ocrMode)}
+                        disabled={loading}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                          ocrMode 
+                            ? 'bg-purple-600' 
+                            : 'bg-gray-200 dark:bg-gray-700'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            ocrMode ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
                   <MobileFileUpload
                     onFilesSelected={handleFilesSelected}
                     disabled={loading}
-                    maxFiles={isPremium ? 50 : 5}
+                    maxFiles={ocrMode ? 3 : (isPremium ? 50 : 5)}
                   />
                   
                   {files.length > 0 && (
@@ -346,18 +402,37 @@ export default function Home() {
                     onClick={handleExtractPDFs}
                     disabled={loading || files.length === 0}
                     loading={loading}
-                    className="w-full mt-4"
+                    className={`w-full mt-4 ${ocrMode ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
                     size="lg"
                   >
                     {loading ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Processing {files.length} file{files.length !== 1 ? 's' : ''}...
-                      </>
+                      <div className="flex flex-col items-center">
+                        <div className="flex items-center">
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          {ocrMode ? 'OCR Processing' : 'Processing'} {files.length} file{files.length !== 1 ? 's' : ''}...
+                        </div>
+                        {processingStatus && (
+                          <div className="text-xs opacity-80 mt-1">
+                            {processingStatus}
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <>
-                        <Zap className="h-4 w-4 mr-2" />
-                        Extract Data
+                        {ocrMode ? (
+                          <>
+                            <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            Extract with OCR
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="h-4 w-4 mr-2" />
+                            Extract Data
+                          </>
+                        )}
                       </>
                     )}
                   </Button>
