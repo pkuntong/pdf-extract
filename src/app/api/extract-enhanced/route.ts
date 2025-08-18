@@ -43,7 +43,12 @@ async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
     const uint8Array = new Uint8Array(arrayBuffer);
     const pdf = await pdfjs.getDocument({ 
       data: uint8Array,
-      verbosity: 0 // Reduce console noise
+      verbosity: 0, // Reduce console noise
+      disableAutoFetch: true,
+      disableStream: true,
+      disableFontFace: true,
+      useSystemFonts: false,
+      stopAtErrors: false
     }).promise;
     
     if (pdf.numPages === 0) {
@@ -78,7 +83,11 @@ async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
     
     return fullText;
   } catch (error) {
-    throw new Error(`PDF parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    if (message.includes('Object.defineProperty called on non-object')) {
+      throw new Error('PDF file format not supported or file is corrupted');
+    }
+    throw new Error(`PDF parsing failed: ${message}`);
   }
 }
 
