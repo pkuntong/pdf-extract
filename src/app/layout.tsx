@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PDF Invoice Extractor",
-  description: "Upload PDF invoices and extract structured data instantly. Export to CSV format.",
+  title: "PDF Extract Pro - AI-Powered PDF Data Extraction",
+  description: "Extract invoice data from PDFs with AI precision. Premium features, bulk processing, and advanced patterns.",
   keywords: ["PDF", "invoice", "extraction", "data", "CSV", "export", "mobile", "PWA"],
   authors: [{ name: "PDF Extract App" }],
   manifest: "/manifest.json",

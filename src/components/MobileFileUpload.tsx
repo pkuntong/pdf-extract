@@ -4,9 +4,7 @@ import React, { useCallback, useState, useRef } from 'react';
 import { useDropzone, FileRejection } from 'react-dropzone';
 import { Upload, Camera, FolderOpen, X, FileText } from 'lucide-react';
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
-import { animated, useSpring, useSprings } from '@react-spring/web';
 
-const AnimatedDiv = animated('div');
 
 interface MobileFileUploadProps {
   onFilesSelected: (files: File[]) => void;
@@ -80,14 +78,6 @@ export const MobileFileUpload: React.FC<MobileFileUploadProps> = ({
     }
   }, [onDrop]);
 
-  // Animation for drag state
-  const dropzoneSpring = useSpring({
-    scale: isDragActive ? 1.02 : 1,
-    backgroundColor: isDragActive ? '#1e40af20' : '#374151',
-    borderColor: isDragActive ? '#3b82f6' : isDragReject ? '#ef4444' : '#6b7280',
-    config: { tension: 300, friction: 20 },
-  });
-
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -96,23 +86,15 @@ export const MobileFileUpload: React.FC<MobileFileUploadProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // Springs for each selected file item to avoid calling hooks inside a loop
-  const itemSprings = useSprings(
-    selectedFiles.length,
-    selectedFiles.map(() => ({
-      from: { opacity: 0, scale: 0.95 },
-      to: { opacity: 1, scale: 1 },
-      config: { tension: 400, friction: 30 },
-    }))
-  );
-
   return (
     <div className="space-y-4">
       {/* Main dropzone */}
-      <AnimatedDiv
+      <div
         {...getRootProps()}
-        style={dropzoneSpring}
         className={`
+          transition-all duration-200 ease-in-out
+          ${isDragActive ? 'scale-105 bg-blue-900/20 border-blue-500' : 'bg-gray-800 border-gray-600'}
+          ${isDragReject ? 'border-red-500' : ''}
           relative rounded-xl border-2 border-dashed p-8 text-center cursor-pointer
           transition-all duration-200 ease-in-out
           ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-400'}
@@ -145,7 +127,7 @@ export const MobileFileUpload: React.FC<MobileFileUploadProps> = ({
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
           </div>
         )}
-      </AnimatedDiv>
+      </div>
 
       {/* Mobile action buttons */}
       <div className="grid grid-cols-2 gap-3 sm:hidden">
@@ -198,11 +180,10 @@ export const MobileFileUpload: React.FC<MobileFileUploadProps> = ({
           </h3>
           <div className="space-y-2 max-h-48 overflow-y-auto">
             {selectedFiles.map((file, index) => (
-              <AnimatedDiv
+              <div
                 key={`${file.name}-${index}`}
                 className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg
-                         border border-gray-600"
-                style={itemSprings[index]}
+                         border border-gray-600 animate-in fade-in-0 slide-in-from-bottom-2"
               >
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   <FileText className="h-5 w-5 text-red-400 flex-shrink-0" />
@@ -225,7 +206,7 @@ export const MobileFileUpload: React.FC<MobileFileUploadProps> = ({
                 >
                   <X className="h-4 w-4" />
                 </button>
-              </AnimatedDiv>
+              </div>
             ))}
           </div>
         </div>

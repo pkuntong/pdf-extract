@@ -1,9 +1,6 @@
 'use client';
 
 import React, { Suspense } from 'react';
-import { animated, useSpring } from '@react-spring/web';
-
-const AnimatedDiv = animated('div');
 
 interface LazyComponentProps {
   children: React.ReactNode;
@@ -26,18 +23,12 @@ export const LazyComponent: React.FC<LazyComponentProps> = ({
   fallback = <DefaultSkeleton />,
   className = '',
 }) => {
-  const fadeIn = useSpring({
-    from: { opacity: 0, transform: 'translateY(10px)' },
-    to: { opacity: 1, transform: 'translateY(0px)' },
-    config: { tension: 280, friction: 20 },
-  });
-
   return (
     <div className={className}>
       <Suspense fallback={fallback}>
-        <AnimatedDiv style={fadeIn}>
+        <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
           {children}
-        </AnimatedDiv>
+        </div>
       </Suspense>
     </div>
   );

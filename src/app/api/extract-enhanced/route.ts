@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ExtractionResult } from '@/types/extraction';
+import { getAvailablePatterns, extractDataWithPatterns } from '@/lib/extraction-patterns';
 
 export async function GET() {
   return NextResponse.json({ 
-    message: 'PDF extraction API endpoint. Use POST to extract data from PDFs.',
-    endpoints: {
-      '/api/extract': 'Standard extraction',
-      '/api/extract-enhanced': 'Premium extraction with advanced patterns'
-    }
+    message: 'Enhanced PDF extraction API with premium patterns.',
+    availablePatterns: getAvailablePatterns(true).map(p => ({
+      name: p.name,
+      description: p.description,
+      premium: p.premium || false
+    }))
   });
 }
 
@@ -29,7 +31,6 @@ async function initPdfJs() {
   }
   return pdfjsLib;
 }
-
 
 async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
   try {
@@ -80,87 +81,85 @@ async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
   }
 }
 
-function extractInvoiceData(text: string, filename: string): ExtractionResult {
-  const result: ExtractionResult = { filename };
+function detectDocumentType(text: string): string {
+  const lowerText = text.toLowerCase();
   
-  // Multiple patterns for invoice numbers
-  const invoicePatterns = [
-    /(?:invoice\s*(?:number|#|no\.?)?|inv\s*(?:number|#|no\.?)?|bill\s*(?:number|#|no\.?)?)\s*:?\s*([A-Z0-9\-_]+)/i,
-    /(?:^|\s)([A-Z]{2,3}-?\d{4,})/m, // Pattern like ABC-1234 or ABC1234
-    /#\s*([A-Z0-9\-_]{3,})/i, // Pattern like #INV123
-  ];
-  
-  for (const pattern of invoicePatterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      result.invoiceNumber = match[1].trim();
-      break;
-    }
+  // Check for specific document types
+  if (lowerText.includes('purchase order') || lowerText.includes('po number')) {
+    return 'Purchase Order';
+  }
+  if (lowerText.includes('contract') || lowerText.includes('agreement')) {
+    return 'Contract';
+  }
+  if (lowerText.includes('bank statement') || lowerText.includes('account balance')) {
+    return 'Bank Statement';
+  }
+  if (lowerText.includes('receipt') && !lowerText.includes('invoice')) {
+    return 'Receipt';
   }
   
-  // Multiple patterns for dates
-  const datePatterns = [
-    /(?:date|invoice\s*date|issued|bill\s*date)\s*:?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
-    /(?:date|invoice\s*date|issued|bill\s*date)\s*:?\s*(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/i,
-    /(?:date|invoice\s*date|issued|bill\s*date)\s*:?\s*(\w{3,9}\s+\d{1,2},?\s+\d{4})/i,
-    /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/, // Any date format
-  ];
-  
-  for (const pattern of datePatterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      result.date = match[1].trim();
-      break;
+  // Default to invoice
+  return 'Standard Invoice';
+}
+
+function enhancedExtractData(text: string, filename: string, isPremium: boolean = false): ExtractionResult {
+  try {
+    // Detect document type
+    const documentType = detectDocumentType(text);
+    
+    // Get available patterns based on subscription
+    const availablePatterns = getAvailablePatterns(isPremium);
+    
+    // Find the matching pattern
+    const pattern = availablePatterns.find(p => p.name === documentType) || 
+                   availablePatterns.find(p => p.name === 'Standard Invoice');
+    
+    if (!pattern) {
+      throw new Error('No extraction pattern available');
     }
+    
+    // Extract data using the pattern
+    const result = extractDataWithPatterns(text, [pattern], filename);
+    
+    // Add metadata
+    result.documentType = documentType;
+    result.extractionPattern = pattern.name;
+    
+    return result;
+  } catch (error) {
+    return {
+      filename,
+      error: `Extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
   }
+}
+
+// Simulate user subscription check (replace with real auth)
+function getUserSubscription(request: NextRequest): { isPremium: boolean; plan: string } {
+  // In a real app, you'd check auth headers/cookies and query your database
+  const userAgent = request.headers.get('user-agent') || '';
   
-  // Multiple patterns for vendor/company
-  const vendorPatterns = [
-    /(?:from|vendor|company|bill\s*to|sold\s*by)\s*:?\s*([A-Za-z\s&,.\-'()]+?)(?:\n|$|\s{2,})/i,
-    /^([A-Za-z\s&,.\-'()]{3,})\s*(?:\n|\r)/m, // First line that looks like a company name
-    /(?:^|\n)\s*([A-Z][A-Za-z\s&,.\-'()]{5,}?)\s*(?:\n|Address|Phone|Email|Tax)/i,
-  ];
+  // For demo purposes, simulate premium for specific user agents
+  const isPremium = userAgent.includes('Premium') || process.env.NODE_ENV === 'development';
   
-  for (const pattern of vendorPatterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      const vendor = match[1].trim().replace(/[:\n\r]+$/, '');
-      if (vendor.length > 2 && vendor.length < 100) {
-        result.vendor = vendor;
-        break;
-      }
-    }
-  }
-  
-  // Multiple patterns for total amount
-  const totalPatterns = [
-    /(?:total|grand\s*total|amount\s*due|balance\s*due|final\s*amount)\s*:?\s*\$?\s*([\d,]+\.?\d*)/i,
-    /(?:total|grand\s*total|amount\s*due|balance\s*due)\s*\$?\s*([\d,]+\.?\d*)/i,
-    /\$\s*([\d,]+\.\d{2})(?:\s|$)/, // Any currency amount
-    /(?:^|\s)([\d,]+\.\d{2})\s*$$/m, // End of line amount
-  ];
-  
-  for (const pattern of totalPatterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      const amount = match[1].replace(/,/g, '');
-      if (parseFloat(amount) > 0) {
-        result.total = amount;
-        break;
-      }
-    }
-  }
-  
-  return result;
+  return {
+    isPremium,
+    plan: isPremium ? 'premium' : 'free'
+  };
 }
 
 export async function POST(request: NextRequest) {
   try {
+    // Get user subscription info
+    const { isPremium, plan } = getUserSubscription(request);
+    
     // Check content length for mobile optimization
     const contentLength = request.headers.get('content-length');
-    if (contentLength && parseInt(contentLength) > 50 * 1024 * 1024) { // 50MB limit
+    const maxSize = isPremium ? 100 * 1024 * 1024 : 10 * 1024 * 1024; // 100MB for premium, 10MB for free
+    
+    if (contentLength && parseInt(contentLength) > maxSize) {
       return NextResponse.json(
-        { error: 'Files too large. Maximum total size is 50MB.' },
+        { error: `Files too large. Maximum size is ${maxSize / 1024 / 1024}MB for ${plan} plan.` },
         { status: 413 }
       );
     }
@@ -172,15 +171,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No files provided' }, { status: 400 });
     }
 
-    if (files.length > 10) {
-      return NextResponse.json({ error: 'Maximum 10 files allowed' }, { status: 400 });
+    // Check file limits based on subscription
+    const maxFiles = isPremium ? 50 : 5;
+    if (files.length > maxFiles) {
+      return NextResponse.json({ 
+        error: `Maximum ${maxFiles} files allowed for ${plan} plan. Upgrade to process more files.` 
+      }, { status: 400 });
     }
     
     const extractions: ExtractionResult[] = [];
     let processedCount = 0;
     
     for (const file of files) {
-      // Add progress for mobile feedback
       processedCount++;
       
       if (file.type !== 'application/pdf' && !file.name?.toLowerCase().endsWith('.pdf')) {
@@ -191,10 +193,11 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      if (file.size > 10 * 1024 * 1024) { // 10MB per file limit
+      const maxFileSize = isPremium ? 50 * 1024 * 1024 : 2 * 1024 * 1024; // 50MB for premium, 2MB for free
+      if (file.size > maxFileSize) {
         extractions.push({
           filename: file.name || 'Unknown file',
-          error: `Error: ${file.name || 'Unknown file'} is too large (max 10MB per file)`
+          error: `Error: ${file.name || 'Unknown file'} is too large (max ${maxFileSize / 1024 / 1024}MB for ${plan} plan)`
         });
         continue;
       }
@@ -204,7 +207,9 @@ export async function POST(request: NextRequest) {
         
         // Extract text using pdfjs-dist
         const text = await extractTextFromPDF(arrayBuffer);
-        const extractedData = extractInvoiceData(text, file.name || 'Unknown file');
+        
+        // Use enhanced extraction with premium patterns
+        const extractedData = enhancedExtractData(text, file.name || 'Unknown file', isPremium);
         extractions.push(extractedData);
       } catch (error) {
         console.error(`PDF processing error for ${file.name || 'Unknown file'}:`, error);
@@ -215,14 +220,20 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Add processing metadata for mobile optimization
+    // Add processing metadata
     const response = {
       extractions,
       metadata: {
         totalFiles: files.length,
         processedFiles: processedCount,
         successfulExtractions: extractions.filter(e => !e.error).length,
+        userPlan: plan,
+        isPremium,
         timestamp: new Date().toISOString(),
+        availablePatterns: getAvailablePatterns(isPremium).map(p => ({
+          name: p.name,
+          description: p.description
+        }))
       }
     };
     
@@ -231,12 +242,13 @@ export async function POST(request: NextRequest) {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'X-Total-Files': files.length.toString(),
         'X-Successful-Extractions': extractions.filter(e => !e.error).length.toString(),
+        'X-User-Plan': plan,
       }
     });
   } catch (error) {
     console.error('API Error:', error);
     
-    // More specific error messages for mobile users
+    // More specific error messages
     let errorMessage = 'Internal server error';
     let statusCode = 500;
     
