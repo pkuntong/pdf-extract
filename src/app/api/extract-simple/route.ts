@@ -63,11 +63,22 @@ async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
 
     return fullText.trim();
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    if (message.includes('Object.defineProperty called on non-object')) {
-      throw new Error('PDF file format not supported or file is corrupted');
+    // Fallback to pdf-parse (debugging disabled fork) for better compatibility
+    try {
+      const buffer = Buffer.from(arrayBuffer);
+      const pdfParse = (await import('pdf-parse-debugging-disabled')).default;
+      const result = await pdfParse(buffer, { max: 50 });
+      if (!result.text || !result.text.trim()) {
+        throw new Error('No readable text found in PDF');
+      }
+      return result.text.trim();
+    } catch (fallbackError) {
+      const message = fallbackError instanceof Error ? fallbackError.message : 'Unknown error';
+      if (message.includes('Object.defineProperty called on non-object')) {
+        throw new Error('PDF file format not supported or file is corrupted');
+      }
+      throw new Error(`PDF parsing failed: ${message}`);
     }
-    throw new Error(`PDF parsing failed: ${message}`);
   }
 }
 
