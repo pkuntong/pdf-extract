@@ -132,33 +132,70 @@ export default function Home() {
       return;
     }
 
-    const csvData = extractedData.map(result => ({
-      filename: result.filename,
-      invoiceNumber: result.invoiceNumber || '',
-      vendor: result.vendor || '',
-      total: result.total || '',
-      date: result.date || '',
-      error: result.error || ''
-    }));
+    // Enhanced CSV export with line items
+    const csvRows: string[] = [];
+    
+    // Header row
+    csvRows.push('Filename,Invoice Number,Vendor,Date,Subtotal,Tax,Tax Rate,Total,Line Item Description,Line Item Quantity,Line Item Unit Price,Line Item Amount,Error');
+    
+    extractedData.forEach(result => {
+      if (result.error) {
+        // For errors, just add one row
+        csvRows.push(`"${result.filename || ''}","","","","","","","","","","","","${result.error}"`);
+      } else if (result.lineItems && result.lineItems.length > 0) {
+        // For invoices with line items, add one row per line item
+        result.lineItems.forEach(item => {
+          csvRows.push([
+            `"${result.filename || ''}"`,
+            `"${result.invoiceNumber || ''}"`,
+            `"${result.vendor || ''}"`,
+            `"${result.date || ''}"`,
+            `"${result.subtotal || ''}"`,
+            `"${result.tax || ''}"`,
+            `"${result.taxRate || ''}"`,
+            `"${result.total || ''}"`,
+            `"${item.description || ''}"`,
+            `"${item.quantity || ''}"`,
+            `"${item.unitPrice || ''}"`,
+            `"${item.amount || ''}"`,
+            `""`
+          ].join(','));
+        });
+      } else {
+        // For invoices without line items, add one summary row
+        csvRows.push([
+          `"${result.filename || ''}"`,
+          `"${result.invoiceNumber || ''}"`,
+          `"${result.vendor || ''}"`,
+          `"${result.date || ''}"`,
+          `"${result.subtotal || ''}"`,
+          `"${result.tax || ''}"`,
+          `"${result.taxRate || ''}"`,
+          `"${result.total || ''}"`,
+          `"No line items extracted"`,
+          `""`,
+          `""`,
+          `""`,
+          `""`
+        ].join(','));
+      }
+    });
 
-    const csvContent = [
-      'Filename,Invoice Number,Vendor,Total,Date,Error',
-      ...csvData.map(row => 
-        `"${row.filename}","${row.invoiceNumber}","${row.vendor}","${row.total}","${row.date}","${row.error}"`
-      )
-    ].join('\n');
-
+    const csvContent = csvRows.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'pdf-extraction-results.csv';
+    a.download = `pdf-extraction-detailed-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    toast.success('Data exported successfully!');
+    const totalLineItems = extractedData.reduce((sum, result) => 
+      sum + (result.lineItems?.length || 0), 0);
+    
+    toast.success(`Detailed CSV exported with ${totalLineItems} line items!`);
   };
 
   return (
@@ -350,7 +387,7 @@ export default function Home() {
                           onClick={handleExportCSV}
                         >
                           <Download className="h-4 w-4 mr-2" />
-                          Export CSV
+                          Export Detailed CSV
                         </Button>
                       )}
                     </div>
@@ -387,31 +424,96 @@ export default function Home() {
                             {result.error ? (
                               <p className="text-sm text-red-600">{result.error}</p>
                             ) : (
-                              <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div>
-                                  <span className="font-medium">Invoice #:</span>
-                                  <p className="text-gray-600 dark:text-gray-400">
-                                    {result.invoiceNumber || 'N/A'}
-                                  </p>
+                              <div className="space-y-4">
+                                {/* Basic Invoice Info */}
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <span className="font-medium">Invoice #:</span>
+                                    <p className="text-gray-600 dark:text-gray-400">
+                                      {result.invoiceNumber || 'N/A'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">Vendor:</span>
+                                    <p className="text-gray-600 dark:text-gray-400">
+                                      {result.vendor || 'N/A'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">Date:</span>
+                                    <p className="text-gray-600 dark:text-gray-400">
+                                      {result.date || 'N/A'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">Total:</span>
+                                    <p className="text-gray-600 dark:text-gray-400 font-semibold">
+                                      {result.total ? `$${result.total}` : 'N/A'}
+                                    </p>
+                                  </div>
                                 </div>
-                                <div>
-                                  <span className="font-medium">Vendor:</span>
-                                  <p className="text-gray-600 dark:text-gray-400">
-                                    {result.vendor || 'N/A'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="font-medium">Total:</span>
-                                  <p className="text-gray-600 dark:text-gray-400">
-                                    {result.total ? `$${result.total}` : 'N/A'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="font-medium">Date:</span>
-                                  <p className="text-gray-600 dark:text-gray-400">
-                                    {result.date || 'N/A'}
-                                  </p>
-                                </div>
+
+                                {/* Line Items */}
+                                {result.lineItems && result.lineItems.length > 0 && (
+                                  <div className="mt-4">
+                                    <h5 className="font-medium text-xs mb-2 text-gray-700 dark:text-gray-300">
+                                      Line Items ({result.lineItems.length})
+                                    </h5>
+                                    <div className="bg-gray-50 dark:bg-gray-700 rounded p-2 max-h-32 overflow-y-auto">
+                                      <div className="space-y-1">
+                                        {result.lineItems.map((item, itemIndex) => (
+                                          <div key={itemIndex} className="flex justify-between items-start text-xs">
+                                            <div className="flex-1 pr-2">
+                                              <p className="font-medium text-gray-800 dark:text-gray-200 leading-tight">
+                                                {item.description}
+                                              </p>
+                                              {(item.quantity || item.unitPrice) && (
+                                                <p className="text-gray-500 dark:text-gray-400 text-xs">
+                                                  {item.quantity && `Qty: ${item.quantity}`}
+                                                  {item.quantity && item.unitPrice && ' • '}
+                                                  {item.unitPrice && `$${item.unitPrice}`}
+                                                </p>
+                                              )}
+                                            </div>
+                                            <div className="text-right">
+                                              <p className="font-medium text-gray-800 dark:text-gray-200">
+                                                ${item.amount?.toFixed(2) || '0.00'}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Breakdown (if available) */}
+                                {(result.subtotal || result.tax || result.taxRate) && (
+                                  <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-600">
+                                    <div className="space-y-1 text-xs">
+                                      {result.subtotal && (
+                                        <div className="flex justify-between">
+                                          <span className="text-gray-600 dark:text-gray-400">Subtotal:</span>
+                                          <span className="text-gray-800 dark:text-gray-200">${result.subtotal}</span>
+                                        </div>
+                                      )}
+                                      {result.tax && (
+                                        <div className="flex justify-between">
+                                          <span className="text-gray-600 dark:text-gray-400">
+                                            Tax{result.taxRate && ` (${result.taxRate})`}:
+                                          </span>
+                                          <span className="text-gray-800 dark:text-gray-200">${result.tax}</span>
+                                        </div>
+                                      )}
+                                      {result.total && (
+                                        <div className="flex justify-between font-semibold pt-1 border-t border-gray-200 dark:border-gray-600">
+                                          <span className="text-gray-800 dark:text-gray-200">Total:</span>
+                                          <span className="text-gray-800 dark:text-gray-200">${result.total}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

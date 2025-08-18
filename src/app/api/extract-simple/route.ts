@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
-import { ExtractionResult } from '@/types/extraction';
+import { ExtractionResult, LineItem } from '@/types/extraction';
 
 // Use PDF.js directly (avoids pdf-parse debug path ENOENT issues)
 let pdfjsLib: typeof import('pdfjs-dist/legacy/build/pdf.mjs') | null = null;
@@ -82,14 +82,110 @@ async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
   }
 }
 
+// Enhanced line item extraction function
+function extractLineItems(text: string): LineItem[] {
+  const lineItems: LineItem[] = [];
+  const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  
+  // Look for table-like structures with products/services
+  const tablePatterns = [
+    // Pattern for: Description | Qty | Price | Amount
+    /^(.{10,50})\s+(\d+(?:\.\d{1,2})?)\s+\$?([\d,]+\.?\d*)\s+\$?([\d,]+\.?\d*)$/,
+    // Pattern for: Description | Amount
+    /^(.{10,80})\s+\$?([\d,]+\.\d{2})$/,
+    // Pattern with quantity: Qty Description Price Total
+    /^(\d+(?:\.\d{1,2})?)\s+(.{10,50})\s+\$?([\d,]+\.?\d*)\s+\$?([\d,]+\.?\d*)$/,
+  ];
+  
+  // Common table headers to identify line item sections
+  const tableHeaders = [
+    /description|item|service|product/i,
+    /qty|quantity|amount/i,
+    /price|rate|cost/i,
+    /total|subtotal/i
+  ];
+  
+  let inLineItemSection = false;
+  let lineCount = 0;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Check if we're entering a line item section
+    if (!inLineItemSection) {
+      const hasTableHeaders = tableHeaders.some(header => header.test(line));
+      if (hasTableHeaders) {
+        inLineItemSection = true;
+        continue;
+      }
+    }
+    
+    // Skip if we haven't found the line items section yet
+    if (!inLineItemSection) continue;
+    
+    // Stop if we hit common invoice footer sections
+    if (/^(subtotal|tax|total|notes?|payment|due|thank)/i.test(line)) {
+      break;
+    }
+    
+    // Try to parse line items using different patterns
+    for (const pattern of tablePatterns) {
+      const match = line.match(pattern);
+      if (match) {
+        let lineItem: LineItem;
+        
+        if (match.length === 5) {
+          // Description | Qty | Price | Amount format
+          lineItem = {
+            description: match[1].trim(),
+            quantity: parseFloat(match[2]),
+            unitPrice: parseFloat(match[3].replace(/,/g, '')),
+            amount: parseFloat(match[4].replace(/,/g, ''))
+          };
+        } else if (match.length === 4) {
+          // Qty | Description | Price | Amount format
+          lineItem = {
+            description: match[2].trim(),
+            quantity: parseFloat(match[1]),
+            unitPrice: parseFloat(match[3].replace(/,/g, '')),
+            amount: parseFloat(match[4].replace(/,/g, ''))
+          };
+        } else if (match.length === 3) {
+          // Description | Amount format
+          lineItem = {
+            description: match[1].trim(),
+            amount: parseFloat(match[2].replace(/,/g, ''))
+          };
+        } else {
+          continue;
+        }
+        
+        // Validate line item data
+        if (lineItem.description && lineItem.description.length > 5 && 
+            (lineItem.amount && lineItem.amount > 0)) {
+          lineItems.push(lineItem);
+          lineCount++;
+          
+          // Limit to prevent excessive parsing
+          if (lineCount >= 20) break;
+        }
+        break;
+      }
+    }
+  }
+  
+  return lineItems;
+}
+
 function extractInvoiceData(text: string, filename: string): ExtractionResult {
   const result: ExtractionResult = { filename };
   
-  // Simple invoice number extraction
+  // Enhanced invoice number extraction
   const invoicePatterns = [
-    /(?:invoice|inv|bill)\s*(?:number|#|no\.?)?[:\s]+([A-Z0-9\-_]{3,})/i,
+    /(?:invoice|inv|bill)\s*(?:number|#|no\.?)?[:\s#]+([A-Z0-9\-_]{3,})/i,
     /(?:^|\s)([A-Z]{2,}-?\d{4,})/m,
     /#\s*([A-Z0-9\-_]{3,})/i,
+    /invoice[:\s]+([A-Z0-9\-_]{3,})/i,
   ];
   
   for (const pattern of invoicePatterns) {
@@ -100,9 +196,10 @@ function extractInvoiceData(text: string, filename: string): ExtractionResult {
     }
   }
   
-  // Simple date extraction
+  // Enhanced date extraction
   const datePatterns = [
-    /(?:date|issued)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+    /(?:invoice\s*date|date|issued|bill\s*date)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i,
+    /(?:date)[:\s]+(\w{3,9}\s+\d{1,2},?\s+\d{4})/i, // Jan 15, 2024
     /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/,
   ];
   
@@ -114,29 +211,68 @@ function extractInvoiceData(text: string, filename: string): ExtractionResult {
     }
   }
   
-  // Simple vendor extraction
+  // Enhanced vendor extraction
   const vendorPatterns = [
-    /(?:from|vendor|company)[:\s]+([A-Za-z\s&,.\-'()]{3,50})/i,
-    /^([A-Za-z\s&,.\-'()]{5,50})/m,
+    /(?:from|vendor|company|bill\s*to|sold\s*by)[:\s]+([A-Za-z\s&,.\-'()]{3,60})/i,
+    /^([A-Z][A-Za-z\s&,.\-'()]{5,50})(?:\n|$)/m,
   ];
   
   for (const pattern of vendorPatterns) {
     const match = text.match(pattern);
     if (match && match[1]) {
       const vendor = match[1].trim().replace(/[:\n\r]+$/, '');
-      if (vendor.length > 2 && vendor.length < 50) {
+      if (vendor.length > 2 && vendor.length < 60) {
         result.vendor = vendor;
         break;
       }
     }
   }
   
-  // Simple total extraction
-  const totalPatterns = [
-    /(?:total|amount)[:\s]+\$?\s*([\d,]+\.?\d*)/i,
-    /\$\s*([\d,]+\.\d{2})/,
+  // Enhanced amount extraction
+  const subtotalPatterns = [
+    /(?:subtotal|sub\s*total)[:\s]+\$?\s*([\d,]+\.?\d*)/i,
   ];
   
+  const taxPatterns = [
+    /(?:tax|vat)[:\s]+\$?\s*([\d,]+\.?\d*)/i,
+    /(?:tax\s*rate)[:\s]+(\d+(?:\.\d{1,2})?%)/i,
+  ];
+  
+  const totalPatterns = [
+    /(?:total|grand\s*total|amount\s*due|final\s*amount)[:\s]+\$?\s*([\d,]+\.?\d*)/i,
+    /(?:total)[:\s]+\$?\s*([\d,]+\.\d{2})/i,
+    /\$\s*([\d,]+\.\d{2})(?:\s|$)/,
+  ];
+  
+  // Extract subtotal
+  for (const pattern of subtotalPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const amount = match[1].replace(/,/g, '');
+      if (parseFloat(amount) > 0) {
+        result.subtotal = amount;
+        break;
+      }
+    }
+  }
+  
+  // Extract tax
+  for (const pattern of taxPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      if (match[1].includes('%')) {
+        result.taxRate = match[1];
+      } else {
+        const amount = match[1].replace(/,/g, '');
+        if (parseFloat(amount) > 0) {
+          result.tax = amount;
+        }
+      }
+      break;
+    }
+  }
+  
+  // Extract total
   for (const pattern of totalPatterns) {
     const match = text.match(pattern);
     if (match && match[1]) {
@@ -146,6 +282,12 @@ function extractInvoiceData(text: string, filename: string): ExtractionResult {
         break;
       }
     }
+  }
+  
+  // Extract line items
+  const lineItems = extractLineItems(text);
+  if (lineItems.length > 0) {
+    result.lineItems = lineItems;
   }
   
   return result;
