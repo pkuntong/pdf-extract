@@ -1,0 +1,95 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import Stripe from 'stripe';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2024-06-20',
+});
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+export async function POST(request: NextRequest) {
+  try {
+    const { subscriptionId } = await request.json();
+
+    if (!subscriptionId) {
+      return NextResponse.json(
+        { error: 'Subscription ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Get the authorization header
+    const authHeader = request.headers.get('authorization');
+    let userId: string | null = null;
+
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (!authError && user) {
+        userId = user.id;
+      }
+    }
+
+    // Verify the subscription belongs to the user
+    if (userId) {
+      const { data: subscription, error: dbError } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('subscription_id', subscriptionId)
+        .eq('user_id', userId)
+        .single();
+
+      if (dbError || !subscription) {
+        return NextResponse.json(
+          { error: 'Subscription not found or access denied' },
+          { status: 404 }
+        );
+      }
+    }
+
+    // Cancel the subscription in Stripe
+    const canceledSubscription = await stripe.subscriptions.cancel(subscriptionId);
+
+    // Update the subscription status in database
+    const { error: updateError } = await supabase
+      .from('subscriptions')
+      .update({
+        status: 'canceled',
+        updated_at: new Date().toISOString()
+      })
+      .eq('subscription_id', subscriptionId);
+
+    if (updateError) {
+      console.error('Failed to update subscription status:', updateError);
+      // Don't return error since Stripe cancellation succeeded
+    }
+
+    return NextResponse.json({
+      success: true,
+      subscription: {
+        id: canceledSubscription.id,
+        status: canceledSubscription.status,
+        cancel_at_period_end: canceledSubscription.cancel_at_period_end,
+        current_period_end: canceledSubscription.current_period_end
+      }
+    });
+
+  } catch (error) {
+    console.error('Cancel subscription error:', error);
+    
+    if (error instanceof Stripe.errors.StripeError) {
+      return NextResponse.json(
+        { error: `Stripe error: ${error.message}` },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'Failed to cancel subscription' },
+      { status: 500 }
+    );
+  }
+}

@@ -186,10 +186,16 @@ export const PricingCard: React.FC<PricingCardProps> = ({
           size="lg"
           className="w-full"
           onClick={() => onSelectPlan(plan)}
-          disabled={isCurrentPlan || loading}
+          disabled={isCurrentPlan || loading || (!isFree && !plan.stripePriceId)}
           loading={loading}
         >
-          {isCurrentPlan ? 'Current Plan' : isFree ? 'Get Started' : 'Upgrade Now'}
+          {isCurrentPlan
+            ? 'Current Plan'
+            : isFree
+            ? 'Get Started'
+            : !plan.stripePriceId
+            ? 'Unavailable'
+            : 'Upgrade Now'}
         </Button>
       </CardFooter>
     </Card>

@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
-import { FeedbackWidget } from "@/components/FeedbackWidget";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PDF Extract Pro - AI-Powered PDF Data Extraction",
-  description: "Extract invoice data from PDFs with AI precision. Premium features, bulk processing, and advanced patterns.",
+  title: "PDF Invoice Extractor",
+  description: "Upload PDF invoices and extract structured data instantly. Export to CSV format.",
   keywords: ["PDF", "invoice", "extraction", "data", "CSV", "export", "mobile", "PWA"],
   authors: [{ name: "PDF Extract App" }],
   manifest: "/manifest.json",
@@ -84,12 +81,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <SubscriptionProvider>
-            {children}
-            <FeedbackWidget />
-          </SubscriptionProvider>
-        </AuthProvider>
+        {children}
       </body>
     </html>
   );

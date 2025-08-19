@@ -5,25 +5,36 @@ import { PricingCard, pricingPlans, PricingPlan } from '@/components/PricingCard
 import { Button } from '@/components/ui/Button';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import toast from 'react-hot-toast';
 import { getStripeJs } from '@/lib/stripe';
 
 export default function PricingPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const { subscription, isPremium } = useSubscription();
   const [loading, setLoading] = useState<string | null>(null);
 
   const handleSelectPlan = async (plan: PricingPlan) => {
+    // Check if user is authenticated for paid plans
+    if (plan.price > 0 && !user) {
+      toast.error('Please sign in to upgrade your plan');
+      router.push('/auth');
+      return;
+    }
+
     if (plan.price === 0) {
       // Handle free plan
       toast.success('You\'re all set with the free plan!');
-      router.push('/');
+      router.push('/dashboard');
       return;
     }
 
     setLoading(plan.id);
 
     try {
-      // Create checkout session
+      // Create checkout session (fallback to simple endpoint if not authenticated)
       const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: {
@@ -31,7 +42,6 @@ export default function PricingPage() {
         },
         body: JSON.stringify({
           priceId: plan.stripePriceId,
-          userId: 'user-' + Date.now(), // In real app, get from auth
         }),
       });
 
@@ -47,9 +57,7 @@ export default function PricingPage() {
         throw new Error('Stripe failed to load');
       }
 
-      const { error } = await stripe.redirectToCheckout({
-        sessionId: data.sessionId,
-      });
+      const { error } = await stripe.redirectToCheckout({ sessionId: data.sessionId });
 
       if (error) {
         throw error;
@@ -105,14 +113,25 @@ export default function PricingPage() {
 
         {/* Pricing Cards */}
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {pricingPlans.map((plan) => (
-            <PricingCard
-              key={plan.id}
-              plan={plan}
-              onSelectPlan={handleSelectPlan}
-              loading={loading === plan.id}
-            />
-          ))}
+          {pricingPlans.map((plan) => {
+            // Determine if this is the current plan
+            let isCurrentPlan = false;
+            if (plan.price === 0 && !isPremium) {
+              isCurrentPlan = true; // Free plan is current if no premium subscription
+            } else if (subscription && plan.stripePriceId === subscription.price_id) {
+              isCurrentPlan = true; // Paid plan matches current subscription
+            }
+
+            return (
+              <PricingCard
+                key={plan.id}
+                plan={plan}
+                onSelectPlan={handleSelectPlan}
+                loading={loading === plan.id}
+                currentPlan={isCurrentPlan ? plan.id : undefined}
+              />
+            );
+          })}
         </div>
 
         {/* FAQ Section */}

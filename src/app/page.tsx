@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Download, FileText, Wifi, WifiOff, Smartphone, RefreshCw, Crown, Zap, BarChart3 } from 'lucide-react';
+import { Download, FileText, Wifi, WifiOff, Smartphone, RefreshCw, Crown, Zap, BarChart3, LogIn } from 'lucide-react';
 import { ExtractionResult } from '@/types/extraction';
 import { MobileFileUpload } from '@/components/MobileFileUpload';
 import { PullToRefresh } from '@/components/PullToRefresh';
@@ -10,6 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useOfflineStorage } from '@/hooks/useOfflineStorage';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { UserMenu } from '@/components/auth/UserMenu';
 import toast, { Toaster } from 'react-hot-toast';
 
 
@@ -21,12 +24,13 @@ interface BeforeInstallPromptEvent extends Event {
 
 export default function Home() {
   const router = useRouter();
+  const { user, session, loading: authLoading } = useAuth();
+  const { isPremium, subscription } = useSubscription();
   const [files, setFiles] = useState<File[]>([]);
   const [extractedData, setExtractedData] = useState<ExtractionResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [isInstallPromptVisible, setIsInstallPromptVisible] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isPremium] = useState(false); // TODO: Connect to auth/subscription system
   const [ocrMode, setOcrMode] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string>('');
   
@@ -122,9 +126,16 @@ export default function Home() {
         setProcessingStatus('Processing PDFs...');
       }
       
+      // Prepare headers
+      const headers: HeadersInit = {};
+      if (session?.access_token && (isPremium || apiEndpoint.includes('extract-enhanced'))) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         body: formData,
+        headers,
       });
 
       const data = await response.json();
@@ -254,14 +265,17 @@ export default function Home() {
                 </div>
                 
                 {/* Navigation */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => router.push('/dashboard')}
-                >
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Dashboard
-                </Button>
+                {user && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push('/dashboard')}
+                  >
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Dashboard
+                  </Button>
+                )}
+                
                 <Button
                   variant="premium"
                   size="sm"
@@ -270,6 +284,22 @@ export default function Home() {
                   <Crown className="h-4 w-4 mr-2" />
                   {isPremium ? 'Premium' : 'Upgrade'}
                 </Button>
+
+                {/* Auth UI */}
+                {authLoading ? (
+                  <div className="w-8 h-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
+                ) : user ? (
+                  <UserMenu />
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push('/auth')}
+                  >
+                    <LogIn className="h-4 w-4 mr-2" />
+                    Sign In
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -335,8 +365,351 @@ export default function Home() {
             </Card>
           )}
 
+          {/* Hero Section */}
+          <div className="text-center mb-16">
+            <h2 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
+              Extract Invoice Data
+              <br />
+              <span className="text-4xl md:text-5xl">in Seconds</span>
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-2xl mx-auto">
+              AI-powered PDF extraction that turns your invoices into structured data. 
+              No more manual data entry. Perfect for accounting, bookkeeping, and business automation.
+            </p>
+            <div className="flex items-center justify-center gap-4 mb-8">
+              <div className="flex items-center gap-2 text-green-600">
+                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <span>No setup required</span>
+              </div>
+              <div className="flex items-center gap-2 text-green-600">
+                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <span>Works offline</span>
+              </div>
+              <div className="flex items-center gap-2 text-green-600">
+                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <span>Export to CSV</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Screenshot Section */}
+          <div className="mb-20">
+            <div className="text-center mb-12">
+              <h3 className="text-3xl font-bold mb-4">See It In Action</h3>
+              <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+                Upload PDFs, extract data automatically, and export structured results. 
+                Our AI handles invoices, receipts, purchase orders, and more.
+              </p>
+            </div>
+            
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+              {/* Screenshot Card 1 - Upload */}
+              <Card className="overflow-hidden">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-6 h-48 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-800 rounded-xl flex items-center justify-center mb-4 mx-auto">
+                      <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <h4 className="font-semibold text-lg mb-2">1. Upload PDFs</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Drag & drop or browse files
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Screenshot Card 2 - Processing */}
+              <Card className="overflow-hidden">
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-6 h-48 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-purple-100 dark:bg-purple-800 rounded-xl flex items-center justify-center mb-4 mx-auto">
+                      <Zap className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <h4 className="font-semibold text-lg mb-2">2. AI Processing</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Extract data automatically
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Screenshot Card 3 - Results */}
+              <Card className="overflow-hidden md:col-span-2 lg:col-span-1">
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-6 h-48 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-green-100 dark:bg-green-800 rounded-xl flex items-center justify-center mb-4 mx-auto">
+                      <Download className="h-8 w-8 text-green-600 dark:text-green-400" />
+                    </div>
+                    <h4 className="font-semibold text-lg mb-2">3. Export Data</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Download CSV or JSON
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+
+          {/* Feature Highlights Grid */}
+          <div className="mb-20">
+            <div className="text-center mb-12">
+              <h3 className="text-3xl font-bold mb-4">Powerful Features</h3>
+              <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+                Everything you need to automate your document processing workflow
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Feature 1 */}
+              <Card className="p-6 hover:shadow-lg transition-shadow">
+                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center mb-4">
+                  <Zap className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h4 className="font-semibold text-lg mb-2">AI-Powered Extraction</h4>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Advanced AI models extract invoice numbers, vendors, totals, dates, and line items with high accuracy.
+                </p>
+              </Card>
+
+              {/* Feature 2 */}
+              <Card className="p-6 hover:shadow-lg transition-shadow">
+                <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center mb-4">
+                  <FileText className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <h4 className="font-semibold text-lg mb-2">Multiple Formats</h4>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Handle invoices, receipts, purchase orders, contracts, and bank statements with specialized patterns.
+                </p>
+              </Card>
+
+              {/* Feature 3 */}
+              <Card className="p-6 hover:shadow-lg transition-shadow">
+                <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center mb-4">
+                  <Download className="h-6 w-6 text-green-600 dark:text-green-400" />
+                </div>
+                <h4 className="font-semibold text-lg mb-2">Export Options</h4>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Export to CSV, JSON, or integrate with your accounting software via our API endpoints.
+                </p>
+              </Card>
+
+              {/* Feature 4 */}
+              <Card className="p-6 hover:shadow-lg transition-shadow">
+                <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center mb-4">
+                  <Smartphone className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                </div>
+                <h4 className="font-semibold text-lg mb-2">Mobile Optimized</h4>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Works perfectly on phones and tablets. Install as a PWA for offline processing and quick access.
+                </p>
+              </Card>
+
+              {/* Feature 5 */}
+              <Card className="p-6 hover:shadow-lg transition-shadow">
+                <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900 rounded-lg flex items-center justify-center mb-4">
+                  <WifiOff className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <h4 className="font-semibold text-lg mb-2">Offline Processing</h4>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Process documents without internet. All data stays local until you choose to sync or export.
+                </p>
+              </Card>
+
+              {/* Feature 6 */}
+              <Card className="p-6 hover:shadow-lg transition-shadow">
+                <div className="w-12 h-12 bg-red-100 dark:bg-red-900 rounded-lg flex items-center justify-center mb-4">
+                  <BarChart3 className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <h4 className="font-semibold text-lg mb-2">Analytics Dashboard</h4>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Track processing history, success rates, and spending patterns with detailed analytics and insights.
+                </p>
+              </Card>
+            </div>
+          </div>
+
+          {/* Pricing Section */}
+          <div className="mb-20">
+            <div className="text-center mb-12">
+              <h3 className="text-3xl font-bold mb-4">Simple, Transparent Pricing</h3>
+              <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+                Start free, upgrade when you need more. No hidden fees, cancel anytime.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+              {/* Free Plan */}
+              <Card className="relative">
+                <CardHeader className="text-center pb-8">
+                  <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FileText className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                  </div>
+                  <CardTitle className="text-2xl">Free</CardTitle>
+                  <CardDescription>Perfect for trying out PDF extraction</CardDescription>
+                  <div className="text-4xl font-bold mt-4">$0<span className="text-lg text-gray-500">/month</span></div>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">5 PDF extractions per month</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">Basic invoice data extraction</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">Files up to 2MB each</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">Mobile-optimized interface</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">Offline storage</span>
+                    </li>
+                  </ul>
+                  <Button 
+                    variant="outline" 
+                    size="lg" 
+                    className="w-full"
+                    onClick={() => {
+                      document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                  >
+                    Get Started Free
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Pro Plan */}
+              <Card className="relative ring-2 ring-blue-500">
+                <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-center py-2 text-sm font-semibold rounded-t-lg">
+                  Most Popular
+                </div>
+                <CardHeader className="text-center pb-8 pt-12">
+                  <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Crown className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <CardTitle className="text-2xl">Pro</CardTitle>
+                  <CardDescription>For professionals and small businesses</CardDescription>
+                  <div className="text-4xl font-bold mt-4">$9.99<span className="text-lg text-gray-500">/month</span></div>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm font-semibold">100 PDF extractions per month</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">Advanced extraction patterns</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">Bulk processing (up to 50 files)</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">Files up to 15MB each</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">Priority processing</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">Analytics dashboard</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm">Email support</span>
+                    </li>
+                  </ul>
+                  <Button 
+                    variant="premium" 
+                    size="lg" 
+                    className="w-full"
+                    onClick={() => router.push('/pricing')}
+                  >
+                    <Crown className="h-4 w-4 mr-2" />
+                    Upgrade to Pro
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="text-center mt-8">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Need more than 100 extractions per month?
+              </p>
+              <Button 
+                variant="outline" 
+                onClick={() => router.push('/pricing')}
+              >
+                View All Plans
+              </Button>
+            </div>
+          </div>
+
           {/* Main Content */}
-          <div className="grid lg:grid-cols-2 gap-8">
+          <div id="upload-section" className="grid lg:grid-cols-2 gap-8">
             {/* Upload Section */}
             <div>
               <Card>

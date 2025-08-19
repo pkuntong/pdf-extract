@@ -144,24 +144,12 @@ function enhancedExtractData(text: string, filename: string, isPremium: boolean 
   }
 }
 
-// Simulate user subscription check (replace with real auth)
-function getUserSubscription(request: NextRequest): { isPremium: boolean; plan: string } {
-  // In a real app, you'd check auth headers/cookies and query your database
-  const userAgent = request.headers.get('user-agent') || '';
-  
-  // For demo purposes, simulate premium for specific user agents
-  const isPremium = userAgent.includes('Premium') || process.env.NODE_ENV === 'development';
-  
-  return {
-    isPremium,
-    plan: isPremium ? 'premium' : 'free'
-  };
-}
+import { getUserSubscription as checkUserSubscription } from '@/lib/subscription-auth';
 
 export async function POST(request: NextRequest) {
   try {
     // Get user subscription info
-    const { isPremium, plan } = getUserSubscription(request);
+    const { isPremium, plan } = await checkUserSubscription(request);
     
     // Check content length for mobile optimization
     const contentLength = request.headers.get('content-length');

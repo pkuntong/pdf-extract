@@ -17,6 +17,7 @@ import {
 import toast from 'react-hot-toast';
 import { ExtractionResult } from '@/types/extraction';
 import { useOfflineStorage } from '@/hooks/useOfflineStorage';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { formatDate } from '@/lib/utils';
 
 interface StoredExtraction {
@@ -42,16 +43,23 @@ function DashboardContent() {
     avgProcessingTime: 0
   });
   const { getExtractions } = useOfflineStorage();
+  const { refreshSubscription } = useSubscription();
 
   // Check for successful payment
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
+      // Refresh subscription status after successful payment
+      refreshSubscription();
       toast.success('Welcome to Premium! Your subscription is now active.');
+      // Clean up URL params
+      router.replace('/dashboard');
     }
     if (searchParams.get('canceled') === 'true') {
       toast.error('Payment was canceled. You can try again anytime.');
+      // Clean up URL params
+      router.replace('/dashboard');
     }
-  }, [searchParams]);
+  }, [searchParams, refreshSubscription, router]);
 
   // Load extraction history
   useEffect(() => {
