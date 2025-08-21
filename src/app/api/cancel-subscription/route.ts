@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { stripe } from '@/lib/stripe';
 import Stripe from 'stripe';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-07-30.basil',
-});
 
 // Initialize Supabase client only when environment variables are available
 function createSupabaseClient() {
@@ -22,6 +19,14 @@ const supabase = createSupabaseClient();
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Stripe is properly configured
+    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_dummy_key') {
+      return NextResponse.json(
+        { error: 'Stripe not configured. Please set up your Stripe keys.' },
+        { status: 503 }
+      );
+    }
+
     // Check if Supabase is available
     if (!supabase) {
       return NextResponse.json(
