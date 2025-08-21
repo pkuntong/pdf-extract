@@ -25,7 +25,7 @@ interface BeforeInstallPromptEvent extends Event {
 export default function Home() {
   const router = useRouter();
   const { user, session, loading: authLoading } = useAuth();
-  const { isPremium, subscription } = useSubscription();
+  const { isPremium } = useSubscription();
   const [files, setFiles] = useState<File[]>([]);
   const [extractedData, setExtractedData] = useState<ExtractionResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -74,12 +74,7 @@ export default function Home() {
     triggerImpact();
   }, [triggerImpact]);
 
-  const handleRefresh = useCallback(async () => {
-    setExtractedData([]);
-    setFiles([]);
-    triggerSuccess();
-    toast.success('Refreshed!');
-  }, [triggerSuccess]);
+
 
   const handleExtractPDFs = async () => {
     if (files.length === 0) {
@@ -241,7 +236,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
-      <PullToRefresh onRefresh={handleRefresh}>
+      <PullToRefresh>
         <div className="container mx-auto px-4 py-8 safe-area-inset">
           {/* Header */}
           <div>

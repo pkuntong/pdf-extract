@@ -7,6 +7,9 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     try {
+      if (!supabase) {
+        throw new Error('Authentication service not available');
+      }
       await supabase.auth.exchangeCodeForSession(code);
     } catch (error) {
       console.error('Error exchanging code for session:', error);

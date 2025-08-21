@@ -49,7 +49,11 @@ function SettingsContent() {
     setLoading('profile');
 
     try {
-      const { data, error } = await supabase.auth.updateUser({
+      if (!supabase) {
+        toast.error('Authentication service not available');
+        return;
+      }
+      const { error } = await supabase.auth.updateUser({
         data: {
           full_name: profileData.displayName,
           display_name: profileData.displayName
@@ -77,6 +81,10 @@ function SettingsContent() {
     setLoading('email');
 
     try {
+      if (!supabase) {
+        toast.error('Authentication service not available');
+        return;
+      }
       const { error } = await supabase.auth.updateUser({
         email: profileData.email
       });
@@ -108,6 +116,10 @@ function SettingsContent() {
     setLoading('password');
 
     try {
+      if (!supabase) {
+        toast.error('Authentication service not available');
+        return;
+      }
       const { error } = await supabase.auth.updateUser({
         password: profileData.newPassword
       });
@@ -138,7 +150,7 @@ function SettingsContent() {
         const response = await fetch('/api/cancel-subscription', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscriptionId: subscription.subscription_id })
+          body: JSON.stringify({ subscriptionId: subscription.stripe_subscription_id })
         });
 
         if (!response.ok) {
@@ -147,6 +159,10 @@ function SettingsContent() {
       }
 
       // Delete user account
+      if (!supabase) {
+        toast.error('Authentication service not available');
+        return;
+      }
       const { error } = await supabase.auth.admin.deleteUser(user!.id);
 
       if (error) throw error;
@@ -311,7 +327,7 @@ function SettingsContent() {
                       Email Address
                     </CardTitle>
                     <CardDescription>
-                      Change your email address. You'll need to verify the new email.
+                      Change your email address. You&apos;ll need to verify the new email.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -545,14 +561,14 @@ function SettingsContent() {
                           <p className="font-medium text-red-800 dark:text-red-200 mb-2">
                             Are you absolutely sure?
                           </p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            This action cannot be undone. Type "DELETE" to confirm:
-                          </p>
+                                                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                              This action cannot be undone. Type &quot;DELETE&quot; to confirm:
+                            </p>
                           <input
                             type="text"
                             placeholder="Type DELETE to confirm"
                             className="w-full mt-2 p-2 border rounded focus:ring-2 focus:ring-red-500"
-                            onChange={(e) => {
+                            onChange={() => {
                               // You could add confirmation logic here
                             }}
                           />

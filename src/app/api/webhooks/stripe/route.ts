@@ -12,6 +12,15 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  // Check if Supabase is available
+  if (!supabase) {
+    console.warn('Supabase not available, webhook processing limited');
+    return NextResponse.json(
+      { error: 'Database service not available' },
+      { status: 503 }
+    );
+  }
+
   const body = await request.text();
   const signature = (await headers()).get('stripe-signature') as string;
 
@@ -58,8 +67,6 @@ export async function POST(request: NextRequest) {
                 stripe_subscription_id: stripeSubscription.id,
                 price_id: priceId,
                 status: stripeSubscription.status,
-                current_period_start: new Date(stripeSubscription.current_period_start * 1000).toISOString(),
-                current_period_end: new Date(stripeSubscription.current_period_end * 1000).toISOString(),
                 updated_at: new Date().toISOString(),
               }, {
                 onConflict: 'user_id',
@@ -95,8 +102,6 @@ export async function POST(request: NextRequest) {
               stripe_subscription_id: subscription.id,
               price_id: priceId,
               status: subscription.status === 'active' ? 'active' : subscription.status,
-              current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-              current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
               updated_at: new Date().toISOString(),
             }, {
               onConflict: 'stripe_subscription_id',

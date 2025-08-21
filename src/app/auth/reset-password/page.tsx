@@ -18,6 +18,11 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     // Check if there's a session (user clicked reset link)
     const checkSession = async () => {
+      if (!supabase) {
+        console.error('Supabase not available');
+        router.push('/auth');
+        return;
+      }
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.push('/auth');
@@ -43,6 +48,10 @@ export default function ResetPasswordPage() {
     setError('');
 
     try {
+      if (!supabase) {
+        setError('Authentication service not available');
+        return;
+      }
       const { error } = await supabase.auth.updateUser({
         password: password
       });

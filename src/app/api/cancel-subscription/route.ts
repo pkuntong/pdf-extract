@@ -3,15 +3,33 @@ import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-06-20',
+  apiVersion: '2025-07-30.basil',
 });
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Initialize Supabase client only when environment variables are available
+function createSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return null;
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
+
+const supabase = createSupabaseClient();
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Supabase is available
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Authentication service not available' },
+        { status: 503 }
+      );
+    }
+
     const { subscriptionId } = await request.json();
 
     if (!subscriptionId) {
@@ -71,9 +89,7 @@ export async function POST(request: NextRequest) {
       success: true,
       subscription: {
         id: canceledSubscription.id,
-        status: canceledSubscription.status,
-        cancel_at_period_end: canceledSubscription.cancel_at_period_end,
-        current_period_end: canceledSubscription.current_period_end
+        status: canceledSubscription.status
       }
     });
 

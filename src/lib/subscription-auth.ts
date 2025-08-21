@@ -1,11 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+// Initialize Supabase client only when environment variables are available
+function createSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return null;
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 // Create a service role client for server-side operations
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabase = createSupabaseClient();
 
 export interface UserSubscription {
   userId: string | null;
@@ -18,6 +27,16 @@ export interface UserSubscription {
 
 export async function getUserSubscription(request: NextRequest): Promise<UserSubscription> {
   try {
+    // Check if Supabase is available
+    if (!supabase) {
+      console.warn('Supabase not available, returning free plan');
+      return {
+        userId: null,
+        isPremium: false,
+        plan: 'free'
+      };
+    }
+
     // Get the authorization header
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -79,6 +98,16 @@ export async function getUserSubscription(request: NextRequest): Promise<UserSub
 // Alternative function for checking subscription using user ID directly
 export async function getSubscriptionByUserId(userId: string): Promise<UserSubscription> {
   try {
+    // Check if Supabase is available
+    if (!supabase) {
+      console.warn('Supabase not available, returning free plan');
+      return {
+        userId,
+        isPremium: false,
+        plan: 'free'
+      };
+    }
+
     const { data: subscription, error } = await supabase
       .from('subscriptions')
       .select('*')

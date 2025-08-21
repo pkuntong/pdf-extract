@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
-import { headers } from 'next/headers';
 import { absoluteUrl } from '@/lib/utils';
 
 export async function GET() {
@@ -28,7 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const origin = (await headers()).get('origin') || 'http://localhost:3000';
+    // const origin = (await headers()).get('origin') || 'http://localhost:3000';
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',

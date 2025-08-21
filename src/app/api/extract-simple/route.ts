@@ -62,7 +62,7 @@ async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
     }
 
     return fullText.trim();
-  } catch (error) {
+  } catch {
     // Fallback to pdf-parse (debugging disabled fork) for better compatibility
     try {
       const buffer = Buffer.from(arrayBuffer);

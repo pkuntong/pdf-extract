@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 // Supabase is imported dynamically when needed to avoid initializing a client without env vars
 
@@ -37,7 +37,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     process.env.NODE_ENV === 'production' // Only enable in production for now
   );
 
-  const refreshSubscription = async () => {
+  const refreshSubscription = useCallback(async () => {
     if (!user || !supabaseEnabled) {
       setSubscription(null);
       setLoading(false);
@@ -46,6 +46,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
     try {
       const { supabase } = await import('@/lib/supabase');
+      if (!supabase) {
+        console.warn('Supabase not available');
+        setSubscription(null);
+        return;
+      }
       const { data, error } = await supabase
         .from('subscriptions')
         .select('*')
@@ -74,11 +79,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, supabaseEnabled]);
 
   useEffect(() => {
     refreshSubscription();
-  }, [user]);
+  }, [user, refreshSubscription]);
 
   const isPremium = subscription?.status === 'active';
 

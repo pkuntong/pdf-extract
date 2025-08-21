@@ -13,6 +13,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if Supabase is available
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Authentication service not available' },
+        { status: 503 }
+      );
+    }
+
     // Get or create Stripe customer
     const { data: userData } = await supabase.auth.admin.getUserById(userId);
     

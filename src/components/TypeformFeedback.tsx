@@ -2,6 +2,15 @@
 
 import React, { useEffect } from 'react';
 
+// Extend Window interface for Typeform
+declare global {
+  interface Window {
+    tf?: {
+      createPopup: (id: string) => { open: () => void };
+    };
+  }
+}
+
 // Instructions for Typeform:
 // 1. Create account at typeform.com
 // 2. Build feedback form with rating, text, email fields
@@ -37,7 +46,6 @@ export const TypeformFeedback = () => {
 // Popup widget version
 export const TypeformPopup = () => {
   const openPopup = () => {
-    // @ts-ignore - Typeform global
     if (window.tf) {
       window.tf.createPopup(TYPEFORM_ID).open();
     }

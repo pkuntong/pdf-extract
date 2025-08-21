@@ -50,7 +50,7 @@ export const FeedbackPage = () => {
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold mb-4">We'd Love Your Feedback!</h1>
+        <h1 className="text-3xl font-bold mb-4">We&apos;d Love Your Feedback!</h1>
         <p className="text-gray-600">
           Help us improve PDF Extract Pro by sharing your thoughts and suggestions.
         </p>

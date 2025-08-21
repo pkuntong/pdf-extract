@@ -9,6 +9,12 @@ import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 import { useOfflineStorage } from '@/hooks/useOfflineStorage';
 import { animated, useSpring, useTransition } from '@react-spring/web';
 
+// PWA install prompt types
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
 // Type the animated div properly
 const AnimatedDiv = animated('div');
 import toast, { Toaster } from 'react-hot-toast';
@@ -18,7 +24,7 @@ export default function Home() {
   const [extractedData, setExtractedData] = useState<ExtractionResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [isInstallPromptVisible, setIsInstallPromptVisible] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   
   const { triggerSuccess, triggerError, triggerImpact } = useHapticFeedback();
   const { isOnline, saveExtraction, getExtractions } = useOfflineStorage();
@@ -40,7 +46,7 @@ export default function Home() {
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
       setIsInstallPromptVisible(true);
     };
 
@@ -173,18 +179,7 @@ export default function Home() {
     toast.success('CSV file downloaded!');
   }, [extractedData, triggerImpact, triggerSuccess]);
   
-  const handleRefresh = useCallback(async () => {
-    if (files.length > 0) {
-      await handleUpload();
-    } else {
-      // Load recent extractions from offline storage
-      const recent = await getExtractions();
-      if (recent.length > 0) {
-        setExtractedData(recent[0].results);
-        toast.success('Loaded recent extractions');
-      }
-    }
-  }, [files, handleUpload, getExtractions]);
+
 
   const installPromptTransition = useTransition(isInstallPromptVisible, {
     from: { opacity: 0, transform: 'translateY(-100%)' },
@@ -219,7 +214,7 @@ export default function Home() {
         }}
       />
       
-      <PullToRefresh onRefresh={handleRefresh} disabled={loading}>
+      <PullToRefresh>
         <div className="safe-area-inset px-4 py-6 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto">
             

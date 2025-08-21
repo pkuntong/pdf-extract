@@ -18,7 +18,7 @@ async function extractTextFromPDFWithOCR(arrayBuffer: ArrayBuffer, filename: str
         console.log(`✅ Standard PDF extraction successful for ${filename} (${textResult.length} chars)`);
         return textResult;
       }
-    } catch (pdfError) {
+    } catch {
       console.log(`⚠️ Standard PDF extraction failed for ${filename}, trying OCR...`);
     }
     
@@ -91,7 +91,7 @@ async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
     }
 
     return fullText.trim();
-  } catch (error) {
+  } catch {
     // Fallback to pdf-parse (debugging disabled fork) for better compatibility
     try {
       const buffer = Buffer.from(arrayBuffer);
@@ -173,7 +173,7 @@ async function performOCRExtraction(arrayBuffer: ArrayBuffer, filename: string):
     // Try to convert PDF to images first
     try {
       pdfImages = await convertPDFToImages(arrayBuffer);
-    } catch (conversionError) {
+    } catch {
       console.warn(`PDF conversion failed for ${filename}, trying alternative OCR approach...`);
       
       // If PDF.js fails completely, try alternative PDF-to-image conversion
