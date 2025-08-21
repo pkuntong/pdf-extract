@@ -47,9 +47,6 @@ export async function POST(request: NextRequest) {
       customer_email: undefined, // Let Stripe collect email
       allow_promotion_codes: true,
       billing_address_collection: 'required',
-      consent_collection: {
-        terms_of_service: 'required',
-      },
     });
 
     return NextResponse.json({ sessionId: session.id, url: session.url });

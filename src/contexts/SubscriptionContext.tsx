@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { supabase } from '@/lib/supabase';
+// Supabase is imported dynamically when needed to avoid initializing a client without env vars
 
 export interface Subscription {
   id: string;
@@ -30,8 +30,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const { user } = useAuth();
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
+  // Skip Supabase if env vars are missing or if we're in development without a proper setup
   const supabaseEnabled = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_URL && 
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+    process.env.NODE_ENV === 'production' // Only enable in production for now
   );
 
   const refreshSubscription = async () => {
@@ -42,6 +45,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     }
 
     try {
+      const { supabase } = await import('@/lib/supabase');
       const { data, error } = await supabase
         .from('subscriptions')
         .select('*')
@@ -50,7 +54,15 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         .maybeSingle();
 
       if (error) {
-        if (process.env.NODE_ENV === 'development') {
+        // Handle common Supabase errors gracefully
+        if (error.code === 'PGRST116') {
+          // No rows found - user has no subscription
+          setSubscription(null);
+        } else if (error.code === '42P01') {
+          // Table doesn't exist yet - treat as no subscription
+          console.warn('Subscriptions table not found - treating as no subscription');
+          setSubscription(null);
+        } else if (process.env.NODE_ENV === 'development' && (error as unknown as { message?: string }).message) {
           console.error('Error fetching subscription:', error);
         }
         setSubscription(null);
