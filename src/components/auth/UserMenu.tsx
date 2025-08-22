@@ -34,7 +34,9 @@ export function UserMenu() {
   if (!user) return null;
 
   const getDisplayName = () => {
-    return user.email?.split('@')[0] || 'User';
+    return user.user_metadata?.display_name || 
+           user.user_metadata?.full_name || 
+           user.email?.split('@')[0] || 'User';
   };
 
   const getInitials = () => {
@@ -46,7 +48,7 @@ export function UserMenu() {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
       >
         <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
           {getInitials()}
@@ -73,7 +75,7 @@ export function UserMenu() {
                 setIsOpen(false);
                 router.push('/settings?tab=profile');
               }}
-              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
             >
               <User className="w-4 h-4 mr-3" />
               Profile
@@ -84,7 +86,7 @@ export function UserMenu() {
                 setIsOpen(false);
                 router.push('/settings');
               }}
-              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
             >
               <Settings className="w-4 h-4 mr-3" />
               Settings
@@ -94,7 +96,7 @@ export function UserMenu() {
 
             <button
               onClick={handleSignOut}
-              className="flex items-center w-full px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+              className="flex items-center w-full px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer"
             >
               <LogOut className="w-4 h-4 mr-3" />
               Sign out

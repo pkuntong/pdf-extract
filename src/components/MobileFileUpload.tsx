@@ -135,7 +135,7 @@ export const MobileFileUpload: React.FC<MobileFileUploadProps> = ({
           onClick={handleFileInput}
           disabled={disabled}
           className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 
-                   disabled:bg-gray-600 disabled:cursor-not-allowed px-4 py-3 rounded-lg 
+                   disabled:bg-gray-600 disabled:cursor-not-allowed cursor-pointer px-4 py-3 rounded-lg 
                    font-medium transition-all duration-200 active:scale-95"
         >
           <FolderOpen className="h-4 w-4" />
@@ -146,7 +146,7 @@ export const MobileFileUpload: React.FC<MobileFileUploadProps> = ({
           onClick={handleCameraCapture}
           disabled={disabled}
           className="flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 
-                   disabled:bg-gray-600 disabled:cursor-not-allowed px-4 py-3 rounded-lg 
+                   disabled:bg-gray-600 disabled:cursor-not-allowed cursor-pointer px-4 py-3 rounded-lg 
                    font-medium transition-all duration-200 active:scale-95"
         >
           <Camera className="h-4 w-4" />
