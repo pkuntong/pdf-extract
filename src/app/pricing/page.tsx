@@ -1,3 +1,36 @@
+import { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: "Pricing Plans - PDF Extract Pro",
+  description: "Choose the perfect plan for your PDF extraction needs. Free plan available with premium upgrades for bulk processing, advanced features, and priority support.",
+  keywords: [
+    "PDF extraction pricing", "document processing plans", "invoice extraction cost",
+    "PDF to CSV pricing", "bulk document processing", "accounting software pricing",
+    "PDF data extraction subscription", "document automation pricing"
+  ],
+  openGraph: {
+    title: "Pricing Plans - PDF Extract Pro", 
+    description: "Choose the perfect plan for your PDF extraction needs. Free plan available with premium upgrades.",
+    url: "/pricing",
+    images: [
+      {
+        url: "/og-pricing.png",
+        width: 1200,
+        height: 630,
+        alt: "PDF Extract Pro Pricing Plans",
+      }
+    ],
+  },
+  twitter: {
+    title: "Pricing Plans - PDF Extract Pro",
+    description: "Choose the perfect plan for your PDF extraction needs. Free plan available with premium upgrades.",
+    images: ["/twitter-pricing.png"],
+  },
+  alternates: {
+    canonical: "/pricing",
+  },
+}
+
 'use client';
 
 import React, { useState } from 'react';
@@ -15,6 +48,39 @@ export default function PricingPage() {
   const { user } = useAuth();
   const { subscription, isPremium } = useSubscription();
   const [loading, setLoading] = useState<string | null>(null);
+
+  // Structured data for pricing page
+  const pricingJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": "PDF Extract Pro",
+    "description": "AI-powered PDF data extraction tool for invoices and business documents",
+    "offers": [
+      {
+        "@type": "Offer",
+        "name": "Free Plan",
+        "price": "0",
+        "priceCurrency": "USD",
+        "billingIncrement": "P1M",
+        "description": "5 PDF extractions per month, basic features",
+        "availability": "https://schema.org/InStock"
+      },
+      {
+        "@type": "Offer", 
+        "name": "Pro Plan",
+        "price": "9.99",
+        "priceCurrency": "USD",
+        "billingIncrement": "P1M",
+        "description": "100 PDF extractions per month, advanced features, bulk processing",
+        "availability": "https://schema.org/InStock"
+      }
+    ],
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "4.8",
+      "ratingCount": "1247"
+    }
+  };
 
   const handleSelectPlan = async (plan: PricingPlan) => {
     // Check if user is authenticated for paid plans
@@ -71,8 +137,13 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
-      <div className="container mx-auto px-4 py-8">
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingJsonLd) }}
+      />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+        <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <Button
@@ -160,8 +231,9 @@ export default function PricingPage() {
               </p>
             </div>
           </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

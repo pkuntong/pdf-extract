@@ -239,7 +239,7 @@ export default function Home() {
       <PullToRefresh>
         <div className="container mx-auto px-4 py-8 safe-area-inset">
           {/* Header */}
-          <div>
+          <header>
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
@@ -297,7 +297,7 @@ export default function Home() {
                 )}
               </div>
             </div>
-          </div>
+          </header>
 
           {/* Premium Features Banner */}
           {!isPremium && (
@@ -361,7 +361,7 @@ export default function Home() {
           )}
 
           {/* Hero Section */}
-          <div className="text-center mb-16">
+          <section className="text-center mb-16">
             <h2 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
               Extract Invoice Data
               <br />
@@ -391,10 +391,10 @@ export default function Home() {
                 <span>Export to CSV</span>
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Screenshot Section */}
-          <div className="mb-20">
+          <section className="mb-20">
             <div className="text-center mb-12">
               <h3 className="text-3xl font-bold mb-4">See It In Action</h3>
               <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
@@ -449,10 +449,10 @@ export default function Home() {
                 </div>
               </Card>
             </div>
-          </div>
+          </section>
 
           {/* Feature Highlights Grid */}
-          <div className="mb-20">
+          <section className="mb-20">
             <div className="text-center mb-12">
               <h3 className="text-3xl font-bold mb-4">Powerful Features</h3>
               <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
@@ -527,10 +527,10 @@ export default function Home() {
                 </p>
               </Card>
             </div>
-          </div>
+          </section>
 
           {/* Pricing Section */}
-          <div className="mb-20">
+          <section className="mb-20">
             <div className="text-center mb-12">
               <h3 className="text-3xl font-bold mb-4">Simple, Transparent Pricing</h3>
               <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
@@ -701,10 +701,10 @@ export default function Home() {
                 View All Plans
               </Button>
             </div>
-          </div>
+          </section>
 
           {/* Main Content */}
-          <div id="upload-section" className="grid lg:grid-cols-2 gap-8">
+          <main id="upload-section" className="grid lg:grid-cols-2 gap-8">
             {/* Upload Section */}
             <div>
               <Card>
@@ -976,7 +976,7 @@ export default function Home() {
                 </Card>
               </div>
             </div>
-          </div>
+          </main>
         </div>
       </PullToRefresh>
       
