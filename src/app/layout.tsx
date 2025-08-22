@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://pdf-extract-pro.com'),
   title: {
     default: "PDF Extract Pro - AI-Powered PDF Data Extraction Tool",
     template: "%s | PDF Extract Pro"
@@ -83,7 +84,6 @@ export const metadata: Metadata = {
   verification: {
     google: process.env.GOOGLE_SITE_VERIFICATION,
     yandex: process.env.YANDEX_VERIFICATION,
-    bing: process.env.BING_VERIFICATION,
   },
   manifest: "/manifest.json",
   appleWebApp: {
